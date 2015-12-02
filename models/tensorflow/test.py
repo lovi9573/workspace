@@ -33,7 +33,6 @@ NUM_HIDDEN = 32
 V_DIM = IMAGE_SIZE*IMAGE_SIZE*NUM_CHANNELS
 SAMPLE_HIDDEN = True
 SAMPLE_VISIBLE = True
-N_GIBBS_STEPS = 10
 
 
 tf.app.flags.DEFINE_boolean("self_test", False, "True if running a self test.")
@@ -100,27 +99,19 @@ def error_rate(predictions, labels):
 
 
 def main(argv=None):  # pylint: disable=unused-argument
-  if FLAGS.self_test:
-    print('Running self-test.')
-    train_data, train_labels = fake_data(256)
-    validation_data, validation_labels = fake_data(16)
-    test_data, test_labels = fake_data(256)
-    num_epochs = 1
-  else:
-    # Get the data.
-    train_data_filename = maybe_download('train-images-idx3-ubyte.gz')
-    test_data_filename = maybe_download('t10k-images-idx3-ubyte.gz')
-
-    # Extract it into numpy arrays.
-    train_data = extract_data(train_data_filename, 60000)
-    test_data = extract_data(test_data_filename, 10000)
-
-    # Generate a validation set.
-    train_data = train_data[:VALIDATION_SIZE, :]
-    validation_data = train_data[VALIDATION_SIZE:, :]
-    num_epochs = NUM_EPOCHS
+  # Get the data.
+  train_data_filename = maybe_download('train-images-idx3-ubyte.gz')
+  test_data_filename = maybe_download('t10k-images-idx3-ubyte.gz')
+  
+  # Extract it into numpy arrays.
+  train_data = extract_data(train_data_filename, 60000)
+  test_data = extract_data(test_data_filename, 10000)
+  
+  # Generate a validation set.
+  train_data = train_data[:VALIDATION_SIZE, :]
+  num_epochs = NUM_EPOCHS
   train_size = train_data.shape[0]
-
+  
   # This is where training samples and labels are fed to the graph.
   # These placeholder nodes will be fed a batch of training data at each
   # training step using the {feed_dict} argument to the Run() call below.
@@ -128,109 +119,60 @@ def main(argv=None):  # pylint: disable=unused-argument
   visible = tf.placeholder(
       tf.float32,
       shape=(BATCH_SIZE,V_DIM))
-  
-  # For the validation and test data, we'll just hold the entire dataset in
-  # one constant node.
-  validation_data_node = tf.constant(validation_data)
-  test_data_node = tf.constant(test_data)
 
   # The variables below hold all the trainable weights. They are passed an
   # initial value which will be assigned when when we call:
   # {tf.initialize_all_variables().run()}
   weights = tf.Variable(
-      tf.truncated_normal([NUM_HIDDEN, V_DIM],
-                          stddev=0.1,
-                          seed=SEED))
-  bias_h = tf.Variable(tf.zeros([NUM_HIDDEN]))
-  bias_v = tf.Variable(tf.constant(0.1, shape=[V_DIM]))
+                        tf.truncated_normal([NUM_HIDDEN, V_DIM],
+                                            stddev=0.1,
+                                            seed=SEED,
+                                            dtype=tf.float32))
+  bias_h = tf.Variable(tf.zeros([NUM_HIDDEN],dtype=tf.float32))
+  bias_v = tf.Variable(tf.constant(0.1, shape=[V_DIM],dtype=tf.float32))
 
 
-  recon = tf.Variable(tf.zeros([BATCH_SIZE, V_DIM]))
+  recon = tf.Variable(tf.zeros([BATCH_SIZE, V_DIM],dtype=tf.float32))
   hidden = tf.Variable(tf.zeros([BATCH_SIZE, NUM_HIDDEN],dtype=tf.float32))
-  
-  E_p = tf.Variable(tf.zeros([NUM_HIDDEN,V_DIM]))
 
   def v_h(v, sample=True):
-    hidden.assign( tf.matmul(v,weights,transpose_b=True)+bias_h)
+    hidden = tf.matmul(v,weights,transpose_b=True)+bias_h
     if sample:
       thresh = tf.random_uniform([BATCH_SIZE, NUM_HIDDEN])
-      hidden.assign( tf.to_float(hidden > thresh))
+      hidden = tf.to_float(hidden > thresh)
     return hidden
   
   def h_v(h, sample=True):
-    recon.assign( tf.matmul(h,weights) + bias_v)
+    recon.assign(tf.matmul(h,weights) + bias_v)
     if sample:
       thresh = tf.random_uniform([BATCH_SIZE, V_DIM])
-      recon.assign( tf.to_float(recon > thresh))
+      recon.assign(tf.to_float(recon > thresh))
     return recon
 
   # We will replicate the model structure for the training subgraph, as well
   # as the evaluation subgraphs, while sharing the trainable parameters.
-  def model(data, train=False):
+  def model(d, train=False):
     """The Model definition."""
     # Positive Phase
-    hidden.assign( v_h(data, SAMPLE_HIDDEN))
+    hidden.assign(v_h(d, SAMPLE_HIDDEN))
     
-    # Get positive phase energy
-    E_p = tf.matmul(hidden, data, transpose_a=True)
-    h = hidden
+    
     # Gibbs chain  
-    for i in range(N_GIBBS_STEPS-1):
-      r = h_v(h,SAMPLE_VISIBLE)
-      h = v_h(r, SAMPLE_HIDDEN)
-    recon.assign( h_v(h,SAMPLE_VISIBLE))
-    hidden.assign( v_h(recon, SAMPLE_HIDDEN))
-  
-    # Get positive phase energy
-    E_n = tf.matmul(hidden,recon, transpose_a=True)
+    #recon = h_v(hidden,SAMPLE_VISIBLE)
+    #hidden = v_h(recon, SAMPLE_HIDDEN)
+    return hidden
     
-    return E_p - E_n
 
   # Training computation: logits + cross-entropy loss.
   E = model(visible, True)
-  loss = tf.reduce_mean(E)
-
-  
-  # Optimizer: set up a variable that's incremented once per batch and
-  # controls the learning rate decay.
-  batch = tf.Variable(0)
-  # Decay once per epoch, using an exponential schedule starting at 0.01.
-  learning_rate = tf.train.exponential_decay(
-      0.01,  # Base learning rate.
-      batch * BATCH_SIZE,  # Current index into the dataset.
-      train_size,  # Decay step.
-      0.95,  # Decay rate.
-      staircase=True)
-  # Use simple momentum for the optimization.
-  optimizer = tf.train.MomentumOptimizer(learning_rate,
-                                         0.9).minimize(loss,
-                                                       global_step=batch)
-
 
   # Create a local session to run this computation.
   with tf.Session() as s:
     # Run all the initializers to prepare the trainable parameters.
     tf.initialize_all_variables().run()
     print('Initialized!')
-    # Loop through training steps.
-    for step in xrange(num_epochs * train_size // BATCH_SIZE):
-      # Compute the offset of the current minibatch in the data.
-      # Note that we could use better randomization across epochs.
-      offset = (step * BATCH_SIZE) % (train_size - BATCH_SIZE)
-      batch_data = train_data[offset:(offset + BATCH_SIZE), :]
-      # This dictionary maps the batch data (as a numpy array) to the
-      # node in the graph is should be fed to.
-      feed_dict = {visible: batch_data}
-      # Run the graph and fetch some of the nodes.
-      _, l, lr = s.run(
-          [optimizer, loss, learning_rate],
-          feed_dict=feed_dict)
-      if step % 100 == 0:
-        print('Epoch %.2f' % (float(step) * BATCH_SIZE / train_size))
-        print('Minibatch loss: %.3f, learning rate: %.6f' % (l, lr))
-        sys.stdout.flush()
-    # Finally print the result!
-
+    h = s.run([E], feed_dict={visible: train_data[0:BATCH_SIZE,:]})
+    print(h)
 
 if __name__ == '__main__':
   tf.app.run()

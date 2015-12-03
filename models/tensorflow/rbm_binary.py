@@ -27,7 +27,7 @@ with open(sys.argv[1],'r') as fin:
   Merge(fin.read(),config)
 
 SOURCE_URL = 'http://yann.lecun.com/exdb/mnist/'
-WORK_DIRECTORY = '/home/user/storage/mnist'
+WORK_DIRECTORY = config.train_data_filename
 IMAGE_SIZE = 28
 NUM_CHANNELS = 1
 PIXEL_DEPTH = 255
@@ -35,13 +35,19 @@ NUM_LABELS = 10
 VALIDATION_SIZE = 5000  # Size of the validation set.
 SEED = 66478  # Set to None for random seed.
 BATCH_SIZE = config.batch_size
-NUM_EPOCHS = 10
-NUM_HIDDEN = 32
+NUM_EPOCHS = config.epochs
+NUM_HIDDEN = config.num_hidden
 V_DIM = IMAGE_SIZE*IMAGE_SIZE*NUM_CHANNELS
-SAMPLE_HIDDEN = True
-SAMPLE_VISIBLE = True
-N_GIBBS_STEPS = 10
-REPORT=100
+SAMPLE_HIDDEN = config.sample_hiddens
+SAMPLE_VISIBLE = config.sample_visibles
+N_GIBBS_STEPS = config.gibbs_sampling_steps
+REPORT=config.synchronization_period
+LR = config.learning_rate
+MOMENTUM = config.momentum
+PERSISTENT_CHAIN = config.persistent_gibbs_chain
+SPARSITY = config.use_sparsity_target
+SPARSITY_TARGET = config.sparsity_target
+SPARSITY_LR = config.sparsity_learning_rate
 
 
 #tf.app.flags.DEFINE_boolean("self_test", False, "True if running a self test.")
@@ -130,22 +136,43 @@ def main(argv=None):  # pylint: disable=unused-argument
                           seed=SEED))
   bias_h = tf.Variable(tf.zeros([NUM_HIDDEN]))
   bias_v = tf.Variable(tf.constant(0.1, shape=[V_DIM]))
-  recon = tf.Variable(tf.zeros([BATCH_SIZE, V_DIM]))
-  hidden = tf.Variable(tf.zeros([BATCH_SIZE, NUM_HIDDEN],dtype=tf.float32))
+  persistent_recon = tf.Variable(tf.zeros([BATCH_SIZE, V_DIM]))
   
-  def v_h(v, sample=True):
-    hidden.assign( tf.matmul(v,weights,transpose_b=True)+bias_h)
+  def v_h_persistent(v, p_h, h, sample=True):
+    p_h_t = p_h.assign(tf.sigmoid(tf.matmul(v,weights,transpose_b=True) +bias_h))
     if sample:
       thresh = tf.random_uniform([BATCH_SIZE, NUM_HIDDEN])
-      hidden.assign( tf.to_float(hidden > thresh))
-    return hidden
+      h_t = h.assign(tf.to_float(p_h_t > thresh))
+    else:
+      h_t = h.assign(p_h_t)
+    return p_h_t,h_t
   
-  def h_v(h, sample=True):
-    recon.assign( tf.matmul(h,weights) + bias_v)
+  def h_v_persistent(h, p_r_var, r_var, sample=True):
+    p_r = p_r_var.assign(tf.sigmoid(tf.matmul(h,weights) + bias_v))
     if sample:
       thresh = tf.random_uniform([BATCH_SIZE, V_DIM])
-      recon.assign( tf.to_float(recon > thresh))
-    return recon
+      r = r_var.assign(tf.to_float(p_r > thresh))
+    else:
+      r = r_var.assign(p_r)
+    return p_r,r
+
+  def v_h(v, sample=True):
+    p_h = tf.sigmoid(tf.matmul(v,weights,transpose_b=True) +bias_h)
+    if sample:
+      thresh = tf.random_uniform([BATCH_SIZE, NUM_HIDDEN])
+      h = tf.to_float(p_h > thresh)
+    else:
+      h = p_h
+    return p_h,h
+  
+  def h_v(h, sample=True):
+    p_r = tf.sigmoid(tf.matmul(h,weights) + bias_v)
+    if sample:
+      thresh = tf.random_uniform([BATCH_SIZE, V_DIM])
+      r = tf.to_float(p_r > thresh)
+    else:
+      r = p_r
+    return p_r,r
 
   def Energy(v,h):
     hwvr = tf.reduce_sum(h*tf.matmul(v,weights, transpose_b=True),reduction_indices=1)
@@ -161,31 +188,41 @@ def main(argv=None):  # pylint: disable=unused-argument
   def model(data, train=False):
     """The Model definition."""
     # Positive Phase
-    hidden.assign( v_h(data, SAMPLE_HIDDEN))
-    
-    # Get positive phase energy
+    p_h_p,h_p = v_h(data, SAMPLE_HIDDEN)
+     
+    # Get positive v energy
     F_p = FreeEnergy(data)
-
-    h = hidden
+    if PERSISTENT_CHAIN:
+      _,h_t = v_h(persistent_recon, SAMPLE_HIDDEN)
+    else:
+      h_t = h_p
     # Gibbs chain  
     for i in range(N_GIBBS_STEPS-1):
-      r = h_v(h,SAMPLE_VISIBLE)
-      h = v_h(r, SAMPLE_HIDDEN)
-    recon.assign( h_v(h,SAMPLE_VISIBLE))
-    hidden.assign( v_h(recon, SAMPLE_HIDDEN))
-  
+      _,r = h_v(h_t,SAMPLE_VISIBLE)
+      _,h_t = v_h(r, SAMPLE_HIDDEN)
+    p_r,r = h_v(h_t,SAMPLE_VISIBLE)
+    if PERSISTENT_CHAIN:
+      r = persistent_recon.assign(r) 
+    p_h_n,h_n = v_h(r, SAMPLE_HIDDEN)
+   
     # Get positive phase energy
-    F_n = FreeEnergy(recon)   
-    return F_p - F_n
+    F_n = FreeEnergy(r)   
+    return F_p - F_n, p_h_p, p_h_n, r
 
   # Build computation graph
-  F = model(visible, True)
-  loss = tf.reduce_mean(F)
+  F,h_p, h_n, recon = model(visible, True)
+  if SPARSITY:
+    print("Using sparsity target: {}".format(SPARSITY_TARGET))
+    loss = tf.reduce_mean(F) +\
+     SPARSITY_LR*tf.reduce_sum(tf.abs(tf.sub(tf.reduce_mean(h_p,0), SPARSITY_TARGET))) +\
+     SPARSITY_LR*tf.reduce_sum(tf.abs(tf.sub(tf.reduce_mean(h_n,0), SPARSITY_TARGET)))
+  else:
+    loss = tf.reduce_mean(F)
   
   # Learning rate scheduling
   batch = tf.Variable(0)
   learning_rate = tf.train.exponential_decay(
-      0.001,  # Base learning rate.
+      LR,  # Base learning rate.
       batch * BATCH_SIZE,  # Current index into the dataset.
       train_size,  # Decay step.
       0.95,  # Decay rate.
@@ -193,11 +230,11 @@ def main(argv=None):  # pylint: disable=unused-argument
  
   # Optimization
   optimizer = tf.train.MomentumOptimizer(learning_rate,
-                                         0.9).minimize(loss,
+                                         MOMENTUM).minimize(loss,
                                                        var_list=[weights,bias_h,bias_v],
                                                        global_step=batch)
 
-
+  display_progress = False
   # Create a local session to run this computation.
   with tf.Session() as s:
     tf.initialize_all_variables().run()
@@ -206,14 +243,23 @@ def main(argv=None):  # pylint: disable=unused-argument
       offset = (step * BATCH_SIZE) % (train_size - BATCH_SIZE)
       batch_data = train_data[offset:(offset + BATCH_SIZE), :]
       feed_dict = {visible: batch_data}
-      _, l, lr = s.run(
-          [optimizer, loss, learning_rate],
+      _, l, lr,_ = s.run(
+          [optimizer, loss, learning_rate, recon],
           feed_dict=feed_dict)
+      if numpy.max(numpy.abs(s.run(weights))) > 1000:
+        display_progress = True
       if step % REPORT == 0:
         print('Epoch %.2f' % (float(step) * BATCH_SIZE / train_size))
         print('Minibatch loss: %.3f, learning rate: %.6f' % (l, lr))
-        w = s.run(weights).reshape([NUM_HIDDEN,28,28,1])
-        b_v = s.run(bias_v).reshape([1,28,28,1])
+      if display_progress == True or (step+1)%(100*REPORT) == 0:
+        #display(s.run(visiblevar).reshape([BATCH_SIZE,28,28,1]))
+        h = s.run(tf.reduce_mean(h_n,0),feed_dict=feed_dict).reshape([NUM_HIDDEN,1,1,1])
+        display(h.reshape([NUM_HIDDEN,1,1,1]))
+        v = batch_data.reshape([BATCH_SIZE,28,28,1])
+        r = s.run(recon,feed_dict=feed_dict).reshape([BATCH_SIZE,28,28,1])
+        display(numpy.append(v,r,0))
+        w = s.run(weights,feed_dict=feed_dict).reshape([NUM_HIDDEN,28,28,1])
+        b_v = s.run(bias_v,feed_dict=feed_dict).reshape([1,28,28,1])
         display(numpy.append(w, b_v, 0))
         sys.stdout.flush()
 

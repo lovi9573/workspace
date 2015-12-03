@@ -40,8 +40,8 @@ def closeFactor(numbera, target):
             return target-d
         d += 1
     return numbera        
-        
-def display(dat, isprob=False):
+ 
+def tile_imgs(dat):       
   """
   tiles and displays input as images
   dat: an n,y,x,c array
@@ -77,21 +77,50 @@ def display(dat, isprob=False):
                    :]
               imgs[:,(img+1)*(x+1)-1] = minval
       imgs[px_row+img_row*(y+1)+1,:] = minval
+  return imgs
+
+
+
+def display(data, isprob=False):
+  imgs = tile_imgs(data)
   if isprob:
       plt.imshow(imgs,interpolation='none',vmin=0,vmax=1)  
-  elif c == -1: #TODO(jesselovitt): fix to show 3 color images correctly
-      imgs = imgs.reshape([vertical_images_in_display*(y+1)/3,horizontal_images_in_display*(x+1),3]) 
-      img = mpimg.fromarray(dat.flatten())
-      plt.imshow(img)
-      plt.show()
+#   elif c == -1: #TODO(jesselovitt): fix to show 3 color images correctly
+#       imgs = imgs.reshape([vertical_images_in_display*(y+1)/3,horizontal_images_in_display*(x+1),3]) 
+#       img = mpimg.fromarray(dat.flatten())
+#       plt.imshow(img)
+#       plt.show()
   else:          
       plt.imshow(imgs,interpolation='none')
       plt.set_cmap('gray')
       plt.colorbar()
       plt.show()
 
+fig = None
+im = None
 
-# if __name__ == "__main__":
+def display_animate(data,isprob=False):
+    global fig
+    global im
+    plt.isinteractive()
+    imgs = tile_imgs(data)
+    if not fig:
+      fig = plt.figure()
+      im = plt.imshow(imgs)
+      plt.set_cmap('gray')
+      plt.colorbar()
+    else:
+      im.set_data(imgs)
+    plt.show(block=False)
+
+
+if __name__ == "__main__":
+  for i in range(10):
+    x = np.random.randn(16,10,10,1)
+    display_animate(x)
+
+
+
 #     isprob = False
 #     if ("-p" in sys.argv and len(sys.argv) < 3) or ("-p" not in sys.argv and len(sys.argv) < 2):
 #         print "Use: "+sys.argv[0]+" <datafile> [-p] \n\t-p  treat values as probabilities (0,1) "

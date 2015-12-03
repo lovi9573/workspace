@@ -1,0 +1,23 @@
+num_hidden:256;
+epochs:20;
+batch_size:20;
+momentum:0.9 ;
+learning_rate:0.01;
+gibbs_sampling_steps:1;
+persistent_gibbs_chain:false;
+sample_visibles:true;
+sample_hiddens:true;
+synchronization_period:512;
+output_filename_base:"output";
+train_data_filename:"/home/user/storage/mnist/train-images.idx3-ubyte"
+use_sparsity_target:true;
+sparsity_target:0.01;
+sparsity_decay:0.90;
+sparsity_learning_rate:1.0;
+diag_error:false;
+diag_weight_update_hist:false;
+diag_hidden_activation_probability:true;
+diag_visible_recon_err:true;
+diag_epoch_weight_output:true;
+diag_train_val_energy_diff:true;
+

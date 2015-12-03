@@ -1,0 +1,58 @@
+syntax = "proto2";
+
+package rbm;
+
+message RbmParameters{
+	// Number of hidden nodes
+	required int32 num_hidden = 1;
+	// Number of epochs to train
+	required int32 epochs = 2;
+	// Training data batch size
+	required int32 batch_size = 3;
+	// learning weight update momentum
+	required float momentum = 4 ;
+	// Learning rate
+	required float learning_rate = 5;
+	// Number of steps of Gibbs sampling to use before extracting a negative particle
+	optional int32 gibbs_sampling_steps = 6 [default=1];
+	// Toggle using a persistent gibbs chain vs new gibbs chain initialized with new training batch.
+	optional bool persistent_gibbs_chain = 7 [default=false];
+	// Toggle sampling of the visible units vs using raw probability values
+	required bool sample_visibles = 8;
+	// Toggle sampling of the hidden units
+	required bool sample_hiddens = 9;
+	// Number of minibatches between garbage collection
+	optional int32 synchronization_period = 10 [default=512];
+	// Filename base for output.
+	required string output_filename_base = 11;
+	// Include reconstruction error diagnostic
+	optional bool diag_error = 12 [default=false];
+	// Include weight update histogram diagnostic
+	optional bool diag_weight_update_hist = 13 [default=false];
+	// Include hidden activation probability diagnostic
+	optional bool diag_hidden_activation_probability =14 [default=false];
+	// Include a visible-reconstruction-error diagnostic
+	optional bool diag_visible_recon_err = 15 [default=false];
+	// Include per epoch weight outputs
+	optional bool diag_epoch_weight_output = 16 [default=false];
+	// Include Energy difference between training and validation batches
+	optional bool diag_train_val_energy_diff = 17 [default=true];
+	// Training Data file
+	required string train_data_filename = 18;
+	// Use sparsity target
+	optional bool use_sparsity_target = 19 [default=false];
+	// Sparsity target
+	// Probability of activation for binary nodes
+	// Mean activation objective for L1 regularization of hidden continous nodes
+	optional float sparsity_target = 20 [default=0.01];
+	// Sparsity decay
+	optional float sparsity_decay = 21 [default=0.95];
+	// Sparsity learnging rate
+	// This is a multiplicative modifier of the overall learning rate
+	optional float sparsity_learning_rate = 22 [default=1.0];
+	// Convolutional options
+	optional int32 convolution_stride = 23 [default=1];
+	optional int32 convolution_patch_dim = 24 [default=1];
+	optional int32 convolution_padding = 25 [default=0];
+
+}

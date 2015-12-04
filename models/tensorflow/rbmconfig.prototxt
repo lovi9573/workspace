@@ -1,9 +1,9 @@
-num_hidden:64;
+num_hidden:255;
 epochs:20;
-batch_size:60;
+batch_size:20;
 momentum:0.9 ;
-learning_rate:0.001;
-gibbs_sampling_steps:10;
+learning_rate:0.1;
+gibbs_sampling_steps:15;
 persistent_gibbs_chain:true;
 sample_visibles:true;
 sample_hiddens:true;
@@ -11,9 +11,9 @@ synchronization_period:20;
 output_filename_base:"output";
 train_data_filename:"/home/user/storage/mnist"
 use_sparsity_target:true;
-sparsity_target:0.1;
-sparsity_decay:0.90;
-sparsity_learning_rate:1.0;
+sparsity_target:0.2;
+sparsity_decay:0.95;
+sparsity_learning_rate:4000.0;
 diag_error:false;
 diag_weight_update_hist:false;
 diag_hidden_activation_probability:true;

@@ -54,5 +54,6 @@ message RbmParameters{
 	optional int32 convolution_stride = 23 [default=1];
 	optional int32 convolution_patch_dim = 24 [default=1];
 	optional int32 convolution_padding = 25 [default=0];
-
+	//Weight decay coefficient
+	optional float weight_decay_coef = 26 [default=0];
 }

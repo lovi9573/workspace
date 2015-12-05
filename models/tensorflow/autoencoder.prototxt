@@ -1,19 +1,14 @@
-num_hidden:10;
-epochs:40;
-batch_size:40;
+num_hidden:512;
+epochs:540;
+batch_size:128;
 momentum:0.9 ;
-learning_rate:0.1;
-gibbs_sampling_steps:15;
-persistent_gibbs_chain:true;
-sample_visibles:true;
-sample_hiddens:true;
-synchronization_period:20;
+learning_rate:1.0;
+synchronization_period:100;
 output_filename_base:"output";
-train_data_filename:"/home/user/storage/mnist"
-use_sparsity_target:false;
+train_data_filename:"/home/jlovitt/storage/data/mnist"
 sparsity_target:0.01;
-sparsity_decay:0.99;
-sparsity_learning_rate:3.0;
+sparsity_learning_rate:0.02;
+weight_decay_coef:0.00002;
 diag_error:false;
 diag_weight_update_hist:false;
 diag_hidden_activation_probability:true;

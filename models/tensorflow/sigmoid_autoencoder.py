@@ -49,6 +49,7 @@ SPARSITY = config.use_sparsity_target
 SPARSITY_TARGET = config.sparsity_target
 SPARSITY_LR = config.sparsity_learning_rate
 SPARSITY_DECAY = config.sparsity_decay
+LAMBDA = 0.0001
 
 
 #tf.app.flags.DEFINE_boolean("self_test", False, "True if running a self test.")
@@ -137,79 +138,45 @@ def main(argv=None):  # pylint: disable=unused-argument
                           seed=SEED))
   bias_h = tf.Variable(tf.zeros([NUM_HIDDEN]))
   bias_v = tf.Variable(tf.zeros([V_DIM]))
-  persistent_recon = tf.Variable(tf.zeros([BATCH_SIZE, V_DIM]))
   sparsity = tf.Variable(tf.fill([1],SPARSITY_TARGET))
 
-  def v_h(v, sample=True):
-    p_h = tf.sigmoid(tf.matmul(v,weights,transpose_b=True) +bias_h)
-    if sample:
-      thresh = tf.random_uniform([BATCH_SIZE, NUM_HIDDEN])
-      h = tf.to_float(p_h > thresh)
-    else:
-      h = p_h
-    return p_h,h
+  def v_h(v):
+    h = tf.sigmoid(tf.matmul(v,weights,transpose_b=True) +bias_h)
+    return h
   
-  def h_v(h, sample=True):
-    p_r = tf.sigmoid(tf.matmul(h,weights) + bias_v)
-    if sample:
-      thresh = tf.random_uniform([BATCH_SIZE, V_DIM])
-      r = tf.to_float(p_r > thresh)
-    else:
-      r = p_r
-    return p_r,r
+  def h_r(h):
+    r = tf.sigmoid(tf.matmul(h,weights) + bias_v)
+    return r
 
-  def Energy(v,h):
-    hwvr = tf.reduce_sum(h*tf.matmul(v,weights, transpose_b=True),reduction_indices=1)
-    bh = tf.matmul(h,tf.expand_dims(bias_h,-1))
-    bv = tf.matmul(v,tf.expand_dims(bias_v,-1))
-    return -(hwvr + bh + bv)
- 
-  def FreeEnergy(v):
-    e = tf.reduce_sum(tf.log(1 + tf.exp( tf.matmul(v,weights,transpose_b=True)+bias_h)),reduction_indices=1)
-    bv = tf.matmul(v,tf.expand_dims(bias_v,-1)) 
-    return -(bv + e)
+  def kl(p, p_hat):
+    a = p*tf.log(tf.div(p,p_hat))
+    b = (1-p)*tf.log(tf.div((1-p),(1-p_hat)))
+    return tf.reduce_sum(a+b)
+  
+  def weight_decay(W,b):
+    return tf.reduce_sum(tf.pow(W,2)) + tf.reduce_sum(tf.pow(b,2))
 
   def model(data, train=False):
     """The Model definition."""
-    # Positive Phase
-    p_h_p,h_p = v_h(data, SAMPLE_HIDDEN)
-     
-    # Get positive v energy
-    F_p = FreeEnergy(data)
-    if PERSISTENT_CHAIN:
-      _,h_t = v_h(persistent_recon, SAMPLE_HIDDEN)
-    else:
-      h_t = h_p
-    # Gibbs chain  
-    for i in range(N_GIBBS_STEPS-1):
-      _,r = h_v(h_t,SAMPLE_VISIBLE)
-      _,h_t = v_h(r, SAMPLE_HIDDEN)
-    p_r,r = h_v(h_t,SAMPLE_VISIBLE)
-    if PERSISTENT_CHAIN:
-      r = persistent_recon.assign(r) 
-    p_h_n,h_n = v_h(r, SAMPLE_HIDDEN)
+    h = v_h(data) 
+    r = h_r(h)
    
-    # Get positive phase energy
-    F_n = FreeEnergy(r)   
-    return F_p - F_n, p_h_p, p_h_n, r
+    return r - data, h, r
 
   # Build computation graph
-  F,h_p, h_n, recon = model(visible, True)
-  if SPARSITY:
-    print("Using sparsity target: {}".format(SPARSITY_TARGET))
-    sparsity = (SPARSITY_DECAY*tf.sub(tf.reduce_mean(h_p,0), SPARSITY_TARGET)) +\
-               (1-SPARSITY_DECAY)*sparsity
-    loss = tf.reduce_mean(F) + SPARSITY_LR*tf.reduce_mean(tf.abs(sparsity)) 
-  else:
-    loss = tf.reduce_mean(F)
+  diff, h, r = model(visible, True)
+  print("Using sparsity target: {}".format(SPARSITY_TARGET))
+  loss = tf.reduce_mean(tf.pow(diff,2)) +\
+         SPARSITY_LR*kl(SPARSITY_TARGET,tf.reduce_mean(h,0))+\
+         LAMBDA*weight_decay(weights,bias_h) 
   
   # Learning rate scheduling
   batch = tf.Variable(0)
   learning_rate = tf.train.exponential_decay(
-      LR/BATCH_SIZE,  # Base learning rate.
+      LR,  # Base learning rate.
       batch * BATCH_SIZE,  # Current index into the dataset.
       train_size,  # Decay step.
-      0.95,  # Decay rate.
+      0.99,  # Decay rate.
       staircase=True)
  
   # Optimization
@@ -227,8 +194,8 @@ def main(argv=None):  # pylint: disable=unused-argument
       offset = (step * BATCH_SIZE) % (train_size - BATCH_SIZE)
       batch_data = train_data[offset:(offset + BATCH_SIZE), :]
       feed_dict = {visible: batch_data}
-      _, l, lr,_ = s.run(
-          [optimizer, loss, learning_rate, recon],
+      _, l, lr = s.run(
+          [optimizer, loss, learning_rate],
           feed_dict=feed_dict)
       if numpy.max(numpy.abs(s.run(weights))) > 1000:
         display_progress = True
@@ -237,13 +204,14 @@ def main(argv=None):  # pylint: disable=unused-argument
         print('Minibatch loss: %.3f, learning rate: %.6f' % (l, lr))
       if display_progress == True or (step+1)%(50*REPORT) == 0:
         #display(s.run(visiblevar).reshape([BATCH_SIZE,28,28,1]))
-        h = s.run(tf.reduce_mean(h_p,0),feed_dict=feed_dict).reshape([NUM_HIDDEN,1,1,1])
-        display(h)
-        bh = s.run(sparsity,feed_dict=feed_dict).reshape([NUM_HIDDEN,1,1,1])
-        display(bh)
+        ht = s.run(tf.reduce_mean(h,0),feed_dict=feed_dict).reshape([NUM_HIDDEN,1,1,1])
+        display(ht)
+        if SPARSITY:
+          bh = s.run(sparsity,feed_dict=feed_dict).reshape([NUM_HIDDEN,1,1,1])
+          display(bh)
         v = batch_data.reshape([BATCH_SIZE,28,28,1])
-        r = s.run(recon,feed_dict=feed_dict).reshape([BATCH_SIZE,28,28,1])
-        display(numpy.append(v,r,0))
+        rt = s.run(r,feed_dict=feed_dict).reshape([BATCH_SIZE,28,28,1])
+        display(numpy.append(v,rt,0))
         w = s.run(weights,feed_dict=feed_dict).reshape([NUM_HIDDEN,28,28,1])
         b_v = s.run(bias_v,feed_dict=feed_dict).reshape([1,28,28,1])
         display(numpy.append(w, b_v, 0))

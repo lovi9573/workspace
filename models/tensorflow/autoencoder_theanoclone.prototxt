@@ -1,14 +1,14 @@
-num_hidden:500;
-epochs:2;
-batch_size:20;
-momentum:0.9 ;
-learning_rate:0.1;
+num_hidden:128;
+epochs:10;
+batch_size:120;
+momentum:0.0 ;
+learning_rate:0.3;
 synchronization_period:100;
 output_filename_base:"output";
 train_data_filename:"/home/jlovitt/storage/data/mnist"
 sparsity_target:0.01;
-sparsity_learning_rate:0.02;
-weight_decay_coef:0.00002;
+sparsity_learning_rate:500;
+weight_decay_coef:0.0005;
 diag_error:false;
 diag_weight_update_hist:false;
 diag_hidden_activation_probability:true;

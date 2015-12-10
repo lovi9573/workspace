@@ -37,7 +37,7 @@ SEED = 66478  # Set to None for random seed.
 BATCH_SIZE = config.batch_size
 NUM_EPOCHS = config.epochs
 NUM_HIDDEN = config.num_hidden
-V_DIM = IMAGE_SIZE*IMAGE_SIZE*NUM_CHANNELS
+N_VISIBLE = IMAGE_SIZE*IMAGE_SIZE*NUM_CHANNELS
 SAMPLE_HIDDEN = config.sample_hiddens
 SAMPLE_VISIBLE = config.sample_visibles
 N_GIBBS_STEPS = config.gibbs_sampling_steps
@@ -130,14 +130,14 @@ def main(argv=None):  # pylint: disable=unused-argument
   print("Training data samples: {}".format(train_size))
 
   #Setup persistent vars
-  visible = tf.placeholder(tf.float32,shape=(BATCH_SIZE,V_DIM))
+  visible = tf.placeholder(tf.float32,shape=(BATCH_SIZE,N_VISIBLE))
   weights = tf.Variable(
-      tf.truncated_normal([NUM_HIDDEN, V_DIM],
+      tf.truncated_normal([NUM_HIDDEN, N_VISIBLE],
                           stddev=0.1,
                           seed=SEED))
   bias_h = tf.Variable(tf.zeros([NUM_HIDDEN]))
-  bias_v = tf.Variable(tf.zeros([V_DIM]))
-  persistent_recon = tf.Variable(tf.zeros([BATCH_SIZE, V_DIM]))
+  bias_v = tf.Variable(tf.zeros([N_VISIBLE]))
+  persistent_recon = tf.Variable(tf.zeros([BATCH_SIZE, N_VISIBLE]))
   sparsity = tf.Variable(tf.fill([1],SPARSITY_TARGET))
 
   def v_h(v, sample=True):
@@ -152,7 +152,7 @@ def main(argv=None):  # pylint: disable=unused-argument
   def h_v(h, sample=True):
     p_r = tf.sigmoid(tf.matmul(h,weights) + bias_v)
     if sample:
-      thresh = tf.random_uniform([BATCH_SIZE, V_DIM])
+      thresh = tf.random_uniform([BATCH_SIZE, N_VISIBLE])
       r = tf.to_float(p_r > thresh)
     else:
       r = p_r

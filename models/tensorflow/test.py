@@ -30,7 +30,7 @@ SEED = 66478  # Set to None for random seed.
 BATCH_SIZE = 64
 NUM_EPOCHS = 10
 NUM_HIDDEN = 32
-V_DIM = IMAGE_SIZE*IMAGE_SIZE*NUM_CHANNELS
+N_VISIBLE = IMAGE_SIZE*IMAGE_SIZE*NUM_CHANNELS
 SAMPLE_HIDDEN = True
 SAMPLE_VISIBLE = True
 
@@ -118,21 +118,21 @@ def main(argv=None):  # pylint: disable=unused-argument
   # TODO(jesse lovitt): Can I modify this in place?
   visible = tf.placeholder(
       tf.float32,
-      shape=(BATCH_SIZE,V_DIM))
+      shape=(BATCH_SIZE,N_VISIBLE))
 
   # The variables below hold all the trainable weights. They are passed an
   # initial value which will be assigned when when we call:
   # {tf.initialize_all_variables().run()}
   weights = tf.Variable(
-                        tf.truncated_normal([NUM_HIDDEN, V_DIM],
+                        tf.truncated_normal([NUM_HIDDEN, N_VISIBLE],
                                             stddev=0.1,
                                             seed=SEED,
                                             dtype=tf.float32))
   bias_h = tf.Variable(tf.zeros([NUM_HIDDEN],dtype=tf.float32))
-  bias_v = tf.Variable(tf.constant(0.1, shape=[V_DIM],dtype=tf.float32))
+  bias_v = tf.Variable(tf.constant(0.1, shape=[N_VISIBLE],dtype=tf.float32))
 
 
-  recon = tf.Variable(tf.zeros([BATCH_SIZE, V_DIM],dtype=tf.float32))
+  recon = tf.Variable(tf.zeros([BATCH_SIZE, N_VISIBLE],dtype=tf.float32))
   hidden = tf.Variable(tf.zeros([BATCH_SIZE, NUM_HIDDEN],dtype=tf.float32))
 
   def v_h(v, sample=True):
@@ -145,7 +145,7 @@ def main(argv=None):  # pylint: disable=unused-argument
   def h_v(h, sample=True):
     recon.assign(tf.matmul(h,weights) + bias_v)
     if sample:
-      thresh = tf.random_uniform([BATCH_SIZE, V_DIM])
+      thresh = tf.random_uniform([BATCH_SIZE, N_VISIBLE])
       recon.assign(tf.to_float(recon > thresh))
     return recon
 

@@ -87,63 +87,29 @@ def extract_data(filename, num_images):
     return data
 
 
-def extract_labels(filename, num_images):
-  """Extract the labels into a 1-hot matrix [image index, label index]."""
-  print('Extracting', filename)
-  with gzip.open(filename) as bytestream:
-    bytestream.read(8)
-    buf = bytestream.read(1 * num_images)
-    labels = numpy.frombuffer(buf, dtype=numpy.uint8)
-  # Convert to dense 1-hot representation.
-  return (numpy.arange(NUM_LABELS) == labels[:, None]).astype(numpy.float32)
-
-
-def fake_data(num_images):
-  """Generate a fake dataset that matches the dimensions of MNIST."""
-  data = numpy.ndarray(
-      shape=(num_images, IMAGE_SIZE*IMAGE_SIZE*NUM_CHANNELS),
-      dtype=numpy.float32)
-  labels = numpy.zeros(shape=(num_images, NUM_LABELS), dtype=numpy.float32)
-  for image in xrange(num_images):
-    label = image % 2
-    data[image, :, :, 0] = label - 0.5
-    labels[image, label] = 1.0
-  return data, labels
-
-
-def error_rate(predictions, labels):
-  """Return the error rate based on dense predictions and 1-hot labels."""
-  return 100.0 - (
-      100.0 * 
-      numpy.sum(numpy.argmax(predictions, 1) == numpy.argmax(labels, 1)) / 
-      predictions.shape[0])
-
 
 def main(argv=None):  # pylint: disable=unused-argument
   # Get the data.
   train_data_filename = maybe_download('train-images-idx3-ubyte.gz')
-  test_data_filename = maybe_download('t10k-images-idx3-ubyte.gz')
-
-  # Extract it into numpy arrays.
   train_data = extract_data(train_data_filename, 60000)
-
-  # Generate a validation set.
-  train_data = train_data[:-VALIDATION_SIZE, :]
   num_epochs = NUM_EPOCHS
   train_size = train_data.shape[0]
   print("Training data samples: {}".format(train_size))
 
   #Setup persistent vars
   visible = tf.placeholder(tf.float32,shape=(BATCH_SIZE,N_VISIBLE))
-  corruption_level = tf.placeholder(tf.float32,shape=())
   weights = tf.Variable(
       tf.random_uniform([NUM_HIDDEN, N_VISIBLE],
                           minval=-4.0*math.sqrt(6.0/(NUM_HIDDEN + N_VISIBLE)),
                           maxval=4.0*math.sqrt(6.0/(NUM_HIDDEN + N_VISIBLE)),
-			  dtype=tf.float32,
+			                    dtype=tf.float32,
                           seed=SEED))
-  bias_h = tf.Variable(tf.zeros([NUM_HIDDEN]))
-  bias_v = tf.Variable(tf.zeros([N_VISIBLE]))
+  bias_h = tf.Variable(tf.zeros([NUM_HIDDEN],dtype=tf.float32))
+  bias_v = tf.Variable(tf.zeros([N_VISIBLE],dtype=tf.float32))
+
+  def corrupt_input(input, thresh):
+    n = tf.random_uniform(tf.shape(input))
+    return tf.to_float(n > thresh)*input
 
   def v_h(v):
     h = tf.sigmoid(tf.matmul(v,weights,transpose_b=True) +bias_h)
@@ -159,52 +125,32 @@ def main(argv=None):  # pylint: disable=unused-argument
     return tf.reduce_mean(a+b)
   
   def cross_entropy(v,r):
-    e = 0.00001
+    e = 0.0000001
     return -tf.reduce_mean(tf.reduce_sum((v*tf.log(r+e) + (1-v)*tf.log(1-r-e)), reduction_indices=1))
   
   def weight_decay(W,b_v,b_h):
     return tf.reduce_sum(tf.pow(W,2)) + tf.reduce_sum(tf.pow(b_h,2))+tf.reduce_sum(tf.pow(b_v,2))
 
-  def bernoulli(shape, thresh):
-    n = tf.random_uniform(shape)
-    return tf.to_float(n > thresh)
 
-  def model(d, train=False):
+  def model(d, corr, train=False):
     """The Model definition."""
-    data = d*bernoulli(tf.shape(d),corruption_level)
+    data =corrupt_input(d,corr)
     h = v_h(data) 
     r = h_r(h) 
-    return data, h, r
-  
-  batch = tf.Variable(0)
-  sparsity_learning_rate= tf.train.exponential_decay(
-		SPARSITY_LR,
-		batch * BATCH_SIZE,
-		train_size,
-		0.4,
-		staircase=True)
-
+    L = cross_entropy(data,r)
+    return L,data, h, r
+    
   # Build computation graph
-  v, h, r = model(visible, True)
-  print("Using sparsity target: {}".format(SPARSITY_TARGET))
-  err_cost = cross_entropy(v,r)
-  sparsity = sparsity_learning_rate*kl(SPARSITY_TARGET,tf.reduce_mean(h,0))
-  weight_cost = LAMBDA*weight_decay(weights,bias_v,bias_h)
-  loss = err_cost + sparsity + weight_cost
-          
-  
+  loss, v, h, r = model(visible, True)
+            
   # Learning rate scheduling
-  learning_rate = tf.train.exponential_decay(
-      LR,  # Base learning rate.
-      batch * BATCH_SIZE,  # Current index into the dataset.
-      train_size,  # Decay step.
-      0.999,  # Decay rate.
-      staircase=True)
+  batch = tf.Variable(0)
+
  
 	
   # Optimization
-  optimizer = tf.train.GradientDescentOptimizer(learning_rate,use_locking=True).minimize(loss,
-                                                       var_list=[weights], #TODO: put bias' back in.
+  optimizer = tf.train.GradientDescentOptimizer(LR).minimize(loss,
+                                                       var_list=[weights,bias_h, bias_v],
                                                        global_step=batch)
 
 
@@ -219,19 +165,14 @@ def main(argv=None):  # pylint: disable=unused-argument
     for step in xrange(num_epochs * train_size // BATCH_SIZE):
       offset = (step * BATCH_SIZE) % (train_size - BATCH_SIZE)
       batch_data = train_data[offset:(offset + BATCH_SIZE), :]
-      feed_dict = {visible: batch_data, corruption_level:step/(num_epochs * train_size // BATCH_SIZE)}
-      _, l, lr,slr = s.run(
-          [optimizer, loss, learning_rate,sparsity_learning_rate],
+      feed_dict = {visible: batch_data}
+      _, l  = s.run(
+          [optimizer, loss],
           feed_dict=feed_dict)
-      e = s.run(err_cost,feed_dict=feed_dict)
-      sp = s.run(sparsity,feed_dict=feed_dict)
-      w = s.run(weight_cost,feed_dict=feed_dict)
-      costs["err"].append(e)
-      costs["sparsity"].append(sp)
-      costs["weight"].append(w)
+
       if step % REPORT == 0:
         print('Epoch %.2f' % (float(step) * BATCH_SIZE / train_size))
-        print('Minibatch loss:(err,sparsity,weight) %.3f: %3f,%3f,%3f   learning rate: %.6f, sparsity_lr %.6f' % (l, e, sp, w, lr, slr))
+        print('Minibatch loss: %.3f' % (l))
       if step == display_step or (step+1)%(1*train_size // BATCH_SIZE) == 0:
         #display(s.run(visiblevar).reshape([BATCH_SIZE,28,28,1]))
         ht = s.run(h,feed_dict=feed_dict).reshape([1,BATCH_SIZE,NUM_HIDDEN,1])
@@ -245,7 +186,7 @@ def main(argv=None):  # pylint: disable=unused-argument
         w = s.run(weights,feed_dict=feed_dict).reshape([NUM_HIDDEN,28,28,1])
         b_v = s.run(bias_v,feed_dict=feed_dict).reshape([1,28,28,1])
         #display(numpy.append(w, b_v, 0))
-	display(w)
+        display(w)
         plt.plot(costs["err"],'r', costs["sparsity"],'b', costs["weight"],'k')
         x0,x1,y0,y1 = plt.axis()
         plt.axis((x0,x1,y0,0.5*y1))

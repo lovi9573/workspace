@@ -1,8 +1,8 @@
-num_hidden:128;
+num_hidden:500;
 epochs:10;
-batch_size:120;
+batch_size:20;
 momentum:0.0 ;
-learning_rate:0.3;
+learning_rate:0.1;
 synchronization_period:100;
 output_filename_base:"output";
 train_data_filename:"/home/jlovitt/storage/data/mnist"

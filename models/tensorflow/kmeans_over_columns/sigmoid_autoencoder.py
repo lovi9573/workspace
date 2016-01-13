@@ -52,6 +52,9 @@ LAMBDA = config.weight_decay_coef
 
 
 
+
+
+
 #tf.app.flags.DEFINE_boolean("self_test", False, "True if running a self test.")
 #FLAGS = tf.app.flags.FLAGS
 

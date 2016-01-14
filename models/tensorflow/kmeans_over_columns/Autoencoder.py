@@ -4,11 +4,11 @@ Created on Jan 13, 2016
 @author: jlovitt
 '''
 
-class Layer(object):
+class Layerdef(object):
   '''
   '''
   
-  def __init(self,params):
+  def __init(self,filterdim = [1,1], filterstride=[1,1], ):
     self.W = 
 
 

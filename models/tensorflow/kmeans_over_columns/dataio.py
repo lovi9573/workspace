@@ -24,7 +24,7 @@ class LMDBDataProvider:
 
     '''
 
-    def __init__(self, data_param, transform_param, mm_batch_num):
+    def __init__(self, data_param, transform_param, mm_batch_num=1):
         bp = BlobProto()
         if len(transform_param.mean_file) == 0:
             self.mean_data = np.ones([3, 256, 256], dtype=np.float32)
@@ -58,6 +58,9 @@ class LMDBDataProvider:
             for k in it:
               keys.append(k)
       return keys
+  
+    def shape(self):
+        return (3, self.crop_size,self.crop_size)
           
     def get_mb(self, phase = 'TRAIN'):
         ''' Get next minibatch

@@ -17,23 +17,28 @@ from six.moves import xrange  # pylint: disable=redefined-builtin
 import tensorflow as tf
 import math
 import matplotlib.pyplot as plt
+from operator import mul
 
 
 
 
 class LayerDef(object):
     
-    def __init__(self):
-        self.outdim = None
-        self.indim = None
+    def __init__(self,t, outdim):
+      self._type = t
+      self._outdim = outdim
+      self._indim = None
         
     
     def outdim(self):
-        return self.outdim
+        return self._outdim
 
     def indim(self):
-        return self.indim
-    
+        return self._indim
+      
+    def instance(self):
+      if self._type == "FC":
+        return FCLayer()
     
 class Layer(object):
     pass
@@ -63,6 +68,10 @@ class DataLayer(Layer):
         
     def recon(self):
         return self._recon
+    
+    def bottom(self):
+      return self.datalayer 
+      
 
 class FCLayer(Layer):
 
@@ -99,27 +108,29 @@ class FCLayer(Layer):
         self.build()  
         
     def build(self):
-        if self.prev() and self.next() and self.d: 
-            self.W = tf.Variable(
-                                 tf.random_uniform([self.prev.top().get_shape().dims, self.d.outdim()],
-                                                   minval=-4.0*math.sqrt(6.0/(self.d.indim()+ self.d.outdim())),
-                                                   maxval=4.0*math.sqrt(6.0/(self.d.indim()+ self.d.outdim())),
-                                                   dtype=tf.float32,
-                                                   seed=SEED)
-                                 )
-            self.bias = tf.Variable(tf.zeros([self.d.outdim()]))
-            self._top = tf.sigmoid(self.prev.top()*self.W+self.bias)
-            if self.next != self:
-                self.next.build()
-            else:
-                self.build_loop()
+        if self.prev and self.next and self.d and self.prev != self: 
+          indim = self.prev.top().get_shape().as_list()
+          inflat = reduce(mul,indim[1:])
+          self.W = tf.Variable(
+                               tf.random_uniform([inflat, self.d.outdim()],
+                                                 minval=-4.0*math.sqrt(6.0/(inflat+ self.d.outdim())),
+                                                 maxval=4.0*math.sqrt(6.0/(inflat+ self.d.outdim())),
+                                                 dtype=tf.float32,
+                                                 seed=0)
+                               )
+          self.bias = tf.Variable(tf.zeros([self.d.outdim()]))
+          self._top = tf.sigmoid(tf.matmul(self.prev.top(),self.W)+self.bias)
+          if self.next != self:
+              self.next.build()
+          else:
+              self.build_loop()
                 
     def build_loop(self):
-        self._recon = tf.sigmoid(self.top()*tf.transpose(self.W,"mirror_W"))
+        self._recon = tf.sigmoid(tf.matmul(self.top(),tf.transpose(self.W)))
         self.prev.build_rev()
         
     def build_rev(self):
-        self._recon = tf.sigmoid(self.next.recon()*tf.transpose(self.W,"mirror_W"))
+        self._recon = tf.sigmoid(tf.matmul(self.next.recon(),tf.transpose(self.W)))
         self.prev.build_rev()
         
     def top(self):
@@ -141,16 +152,21 @@ class AutoEncoder(object):
     
     def __init__(self, dp):
         self.dp = dp
-
-        self.front = [DataLayer(self.dp)]
+        self.column = [DataLayer(self.dp)]
+        self.bottom = self.column[0].bottom()
         
     def add_layer(self,definition):
-        l = Layer()
+        l = definition.instance()
         l.set_params(definition)
         l.set_next(l)
-        self.front[-1].set_next(l)
+        self.column[-1].set_next(l)
+        self.column.append(l)
         l.build()
+        self.top = self.column[-1].top()
+        self.recon = self.column[0].recon()
     
+    def fwd(self,data):
+      pass
         
             
 

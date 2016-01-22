@@ -60,13 +60,17 @@ class LMDBDataProvider:
       return keys
   
     def shape(self):
-        return (3, self.crop_size,self.crop_size)
+        return (self.batch_size, 3* self.crop_size**2)
+
+    def get_mb_by_keys(self,keys):
+      pass
           
     def get_mb(self, phase = 'TRAIN'):
         ''' Get next minibatch
         '''
         env = lmdb.open(self.source, readonly=True)
         samples = np.zeros([self.batch_size, self.crop_size ** 2 * 3], dtype=np.float32)
+        keys = []
         num_label = -1
         count = 0
         with env.begin(write=False, buffers=False) as txn:
@@ -87,6 +91,7 @@ class LMDBDataProvider:
                     im_cropped = im_cropped[:,:,::-1]
                 
                 samples[count, :] = im_cropped.reshape(self.crop_size ** 2 * 3).astype(np.float32)
+                keys.append(key)
                
                 '''
                 #output
@@ -106,16 +111,17 @@ class LMDBDataProvider:
                 
                 count = count + 1
                 if count == self.batch_size:
-                    yield (samples, labels)
+                    yield (samples, labels, keys)
+                    keys = []
                     if phase == 'CHECK':
                         while True:
-                            yield(samples, labels)
+                            yield(samples, labels, keys)
                     
                     labels = np.zeros([self.batch_size, num_label], dtype=np.float32)
                     count = 0
         if count != self.batch_size:
             delete_idx = np.arange(count, self.batch_size)
-            yield (np.delete(samples, delete_idx, 0), np.delete(labels, delete_idx, 0))
+            yield (np.delete(samples, delete_idx, 0), np.delete(labels, delete_idx, 0), keys)
 
     def get_multiview_mb(self):
         '''  Multiview testing will get better accuracy than single view testing. For each image,

@@ -9,13 +9,14 @@ from matplotlib import pyplot as plt
 from sigmoid_autoencoder import *
 import random as rand
 import numpy as np
+import tensorflow as tf
 
 class Object:
     pass
 
 N_COLUMNS = 3
 N_STEPS = 2
-LAYERS = [LayerDef("FC",1000)]
+LAYERS = [LayerDef("FC",10)]
 DATA_PARAM = Object()
 DATA_PARAM.batch_size = 16
 TRANSFORM_PARAM = Object()
@@ -30,12 +31,13 @@ def converged(a, b):
   else:
     return a == b
 
-def map_img_2_col(keys, columns):
+def map_img_2_col(columns):
   mapping = {}
   outputs = np.zeros([DATA_PARAM.batch_size, len(columns)])
   for mb in dp.get_mb():
     for i,column in columns.iteritems():
-      outputs[:,i] = column.fwd(mb[0])
+      act = column.fwd(mb[0])
+      outputs[:,i] = np.mean(act, axis=1)
     maxvals = np.argmax(outputs,axis=1)
     for key,col in zip(mb[2],maxvals):
       mapping[key] = col
@@ -47,17 +49,18 @@ if __name__ == '__main__':
     dp = LMDBDataProvider(DATA_PARAM,TRANSFORM_PARAM )
     imgkeys = dp.get_keys()
     columns = {}
-    for i in range(N_COLUMNS):
-      columns[i] = AutoEncoder(dp)
-    print columns
-    for l in LAYERS:
-      for column in columns.values():
-        column.add_layer(l)
-      immap_old = None
-      immap = map_img_2_col(imgkeys, columns)
-#       
-#       while(not converged(immap, immap_old)):
-#         encode(immap, N_STEPS)
+    with tf.Session() as s:
+      for i in range(N_COLUMNS):
+        columns[i] = AutoEncoder(s,dp)
+      print columns
+      for l in LAYERS:
+        for column in columns.values():
+          column.add_layer(l)
+        tf.initialize_all_variables().run()
+        immap_old = None
+        immap = map_img_2_col(columns)
+        while(not converged(immap, immap_old)):
+          encode(immap, N_STEPS)
 #         immap_old = immap
 #         immap = map_img_2_col(imgkeys, columns)
 #     

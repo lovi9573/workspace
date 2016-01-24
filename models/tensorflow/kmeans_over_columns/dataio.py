@@ -120,8 +120,9 @@ class LMDBDataProvider:
                     labels = np.zeros([self.batch_size, num_label], dtype=np.float32)
                     count = 0
         if count != self.batch_size:
-            delete_idx = np.arange(count, self.batch_size)
-            yield (np.delete(samples, delete_idx, 0), np.delete(labels, delete_idx, 0), keys)
+          pass
+#             delete_idx = np.arange(count, self.batch_size)
+#             yield (np.delete(samples, delete_idx, 0), np.delete(labels, delete_idx, 0), keys)
 
     def get_multiview_mb(self):
         '''  Multiview testing will get better accuracy than single view testing. For each image,

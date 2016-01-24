@@ -81,12 +81,15 @@ class FCLayer(Layer):
         self.prev = None
         self.d = None
     
-    def set_params(self,d):
+    def set_params(self,d,n):
         '''
         :param d: A definition of layer parameters
+        :param n: The layer number
         :type d: LayerDef
+        :type n: Integer
         '''
         self.d = d
+        self.n = n
         self.build()
  
     def set_next(self,n):
@@ -115,10 +118,12 @@ class FCLayer(Layer):
                                tf.random_uniform([inflat, self.d.outdim()],
                                                  minval=-4.0*math.sqrt(6.0/(inflat+ self.d.outdim())),
                                                  maxval=4.0*math.sqrt(6.0/(inflat+ self.d.outdim())),
-                                                 dtype=tf.float32,
-                                                 seed=0)
-                               )
-          self.bias = tf.Variable(tf.zeros([self.d.outdim()]))
+                                                 dtype=tf.float32
+                                                 ),
+                               name='W_'+str(self.n))
+          self.bias = tf.Variable(
+                                  tf.zeros([self.d.outdim()]),
+                                  name='b_'+str(self.n))
           self._top = tf.sigmoid(tf.matmul(self.prev.top(),self.W)+self.bias)
           if self.next != self:
               self.next.build()
@@ -150,14 +155,15 @@ class ConvLayer(Layer):
 
 class AutoEncoder(object):
     
-    def __init__(self, dp):
+    def __init__(self,s, dp):
         self.dp = dp
+        self.s = s
         self.column = [DataLayer(self.dp)]
         self.bottom = self.column[0].bottom()
         
     def add_layer(self,definition):
         l = definition.instance()
-        l.set_params(definition)
+        l.set_params(definition, len(self.column))
         l.set_next(l)
         self.column[-1].set_next(l)
         self.column.append(l)
@@ -166,7 +172,7 @@ class AutoEncoder(object):
         self.recon = self.column[0].recon()
     
     def fwd(self,data):
-      pass
+      return self.s.run(self.top, feed_dict={self.bottom:data})
         
             
 

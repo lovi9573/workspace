@@ -33,6 +33,7 @@ def converged(a, b):
 
 def map_img_2_col(columns):
   mapping = {}
+  stats = [0]*len(columns)
   outputs = np.zeros([DATA_PARAM.batch_size, len(columns)])
   for mb in dp.get_mb():
     for i,column in columns.iteritems():
@@ -41,8 +42,26 @@ def map_img_2_col(columns):
     maxvals = np.argmax(outputs,axis=1)
     for key,col in zip(mb[2],maxvals):
       mapping[key] = col
+      stats[col] += 1
+  print "Mapping Stats: ",stats
   return mapping
 
+def encode(map, columns, epochs):
+    datas = [np.zeros(dp.shape()) for i in columns]
+    indicies = [0 for i in columns]
+    for e in range(epochs):
+        for mb in dp.get_mb():
+            print len(mb)
+            for i in range(len(mb[2])):
+                dat,label,tag = (mb[0][i], mb[1][i], mb[2][i])
+                i = map[tag]
+                datas[i][indicies[i],:] = dat
+                indicies[i] += 1
+                if indicies[i] == DATA_PARAM.batch_size:
+                    columns[i].encode_mb(datas[i])
+                    indicies[i] = 0
+                    print "encode:",i
+            
 
 if __name__ == '__main__':
     DATA_PARAM.source = sys.argv[1]
@@ -60,7 +79,7 @@ if __name__ == '__main__':
         immap_old = None
         immap = map_img_2_col(columns)
         while(not converged(immap, immap_old)):
-          encode(immap, N_STEPS)
+          encode(immap, columns, N_STEPS)
 #         immap_old = immap
 #         immap = map_img_2_col(imgkeys, columns)
 #     

@@ -174,7 +174,8 @@ class AutoEncoder(object):
     def fwd(self,data):
       return self.s.run(self.top, feed_dict={self.bottom:data})
         
-            
+    def encode_mb(self,data): 
+          pass
 
 #tf.app.flags.DEFINE_boolean("self_test", False, "True if running a self test.")
 #FLAGS = tf.app.flags.FLAGS

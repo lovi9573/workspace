@@ -1,9 +1,9 @@
 
-
+FLAGS=-Wall -Wextra 
 INCLUDES=-I/usr/include/bullet
-
+LIBS=-lBulletDynamics -lBulletCollision -lLinearMath
 
 all: build
 
 build:
-	gcc helloworld.cpp $(INCLUDES)
+	g++ $(FLAGS) $(INCLUDES) $(LIBS) helloworld.cpp -o helloworld

@@ -93,9 +93,11 @@ class AddBox(bpy.types.Operator):
             mesh = bpy.data.meshes.new("Fry"+str(i))
     
             bm = bmesh.new()
+            
     
             for v_co in verts_loc:
                 bm.verts.new(v_co)
+            bm.verts.ensure_lookup_table()
     
             for f_idx in faces:
                 bm.faces.new([bm.verts[i] for i in f_idx])
@@ -114,6 +116,8 @@ class AddBox(bpy.types.Operator):
                               random.uniform(-self.LOCATION_RANGE,self.LOCATION_RANGE)])
             #bpy.context.scene.objects.active.rotation_euler = (12,14,15,'XYZ')
             bpy.context.object.game.physics_type = 'RIGID_BODY'
+            bpy.context.object.game.use_collision_bounds = True
+            bpy.context.object.game.collision_bounds_type = 'BOX'
         return {'FINISHED'}
 
 

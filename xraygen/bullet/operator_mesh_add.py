@@ -74,6 +74,7 @@ class AddBox(bpy.types.Operator):
     location = FloatVectorProperty(
             name="Location",
             subtype='TRANSLATION',
+            default=mu.Vector([0,0,0])
             )
     rotation = FloatVectorProperty(
             name="Rotation",
@@ -83,6 +84,10 @@ class AddBox(bpy.types.Operator):
     def execute(self, context):
         if bpy.ops.rigidbody.world_add.poll():
             bpy.ops.rigidbody.world_add()
+        bpy.ops.group.create()
+        group = bpy.data.groups[-1]
+        group.name = "Auto-Fries"+str(len(bpy.data.groups))
+        self.location = mu.Vector([0,0,0])
         for i in range(self.N):
             self.depth = random.uniform(1.0,5.0)
             verts_loc, faces = add_box(self.width,
@@ -97,7 +102,7 @@ class AddBox(bpy.types.Operator):
     
             for v_co in verts_loc:
                 bm.verts.new(v_co)
-            bm.verts.ensure_lookup_table()
+            #bm.verts.ensure_lookup_table()
     
             for f_idx in faces:
                 bm.faces.new([bm.verts[i] for i in f_idx])
@@ -107,7 +112,7 @@ class AddBox(bpy.types.Operator):
     
             # add the mesh as an object into the scene with this utility module
             from bpy_extras import object_utils
-            object_utils.object_data_add(context, mesh, operator=self)
+            new_object = object_utils.object_data_add(context, mesh, operator=self)
             rot = bpy.context.scene.objects.active.rotation_euler
             rot[:] = random.uniform(0,2*math.pi),random.uniform(0,2*math.pi),random.uniform(0,2*math.pi)
             loc = bpy.context.scene.objects.active.location
@@ -118,6 +123,7 @@ class AddBox(bpy.types.Operator):
             bpy.context.object.game.physics_type = 'RIGID_BODY'
             bpy.context.object.game.use_collision_bounds = True
             bpy.context.object.game.collision_bounds_type = 'BOX'
+            bpy.ops.object.group_link(group=group.name)
         return {'FINISHED'}
 
 

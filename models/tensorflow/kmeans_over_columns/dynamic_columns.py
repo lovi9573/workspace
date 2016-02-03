@@ -46,7 +46,7 @@ def map_img_2_col(columns):
   print "Mapping Stats: ",stats
   return mapping
 
-def encode(map, columns, epochs):
+def encode(imap, columns, epochs):
     datas = [np.zeros(dp.shape()) for i in columns]
     indicies = [0 for i in columns]
     for e in range(epochs):
@@ -54,7 +54,7 @@ def encode(map, columns, epochs):
             print len(mb)
             for i in range(len(mb[2])):
                 dat,label,tag = (mb[0][i], mb[1][i], mb[2][i])
-                i = map[tag]
+                i = imap[tag]
                 datas[i][indicies[i],:] = dat
                 indicies[i] += 1
                 if indicies[i] == DATA_PARAM.batch_size:
@@ -64,6 +64,9 @@ def encode(map, columns, epochs):
             
 
 if __name__ == '__main__':
+    if len(sys.argv) != 2:
+      print "Usage: python dynamic_columns.py <path to lmdb data>"
+      sys.exit(-1)
     DATA_PARAM.source = sys.argv[1]
     dp = LMDBDataProvider(DATA_PARAM,TRANSFORM_PARAM )
     imgkeys = dp.get_keys()
@@ -72,16 +75,18 @@ if __name__ == '__main__':
       for i in range(N_COLUMNS):
         columns[i] = AutoEncoder(s,dp)
       print columns
+      #Iterate over layer definitions to build a column
       for l in LAYERS:
         for column in columns.values():
           column.add_layer(l)
         tf.initialize_all_variables().run()
         immap_old = None
         immap = map_img_2_col(columns)
+        #Train current layer depth until convergence.
         while(not converged(immap, immap_old)):
           encode(immap, columns, N_STEPS)
-#         immap_old = immap
-#         immap = map_img_2_col(imgkeys, columns)
+          immap_old = immap
+          immap = map_img_2_col(imgkeys, columns)
 #     
 # #   dat = dp.get_mb()
 # #   for d in dat:

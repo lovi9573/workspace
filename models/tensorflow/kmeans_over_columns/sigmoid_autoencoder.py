@@ -41,7 +41,9 @@ class LayerDef(object):
         return FCLayer()
     
 class Layer(object):
-    pass
+    
+    def params(self):
+      return []
 
 class DataLayer(Layer):
     
@@ -143,6 +145,9 @@ class FCLayer(Layer):
     
     def recon(self):
         return self._recon
+      
+    def params(self):
+      return [self.W, self.bias]
     
     
 
@@ -158,24 +163,31 @@ class AutoEncoder(object):
     def __init__(self,s, dp):
         self.dp = dp
         self.s = s
-        self.column = [DataLayer(self.dp)]
-        self.bottom = self.column[0].bottom()
+        self.layers = [DataLayer(self.dp)]
+        self.bottom = self.layers[0].bottom()
+        self.LEARNING_RATE=0.9
         
     def add_layer(self,definition):
         l = definition.instance()
-        l.set_params(definition, len(self.column))
+        l.set_params(definition, len(self.layers))
         l.set_next(l)
-        self.column[-1].set_next(l)
-        self.column.append(l)
+        self.layers[-1].set_next(l)
+        self.layers.append(l)
         l.build()
-        self.top = self.column[-1].top()
-        self.recon = self.column[0].recon()
+        self.top = self.layers[-1].top()
+        self.recon = self.layers[0].recon()
+        self.loss = tf.pow(self.recon - self.bottom,2)
+        # Optimization
+        self.optimizer = tf.train.GradientDescentOptimizer(self.LEARNING_RATE,use_locking=True) \
+                                  .minimize(self.loss, var_list=[w for l in self.layers for w in l.params()])
+                                                          
     
     def fwd(self,data):
       return self.s.run(self.top, feed_dict={self.bottom:data})
         
     def encode_mb(self,data): 
-          pass
+          feed_dict = {self.bottom:data}
+          self.s.run(self.optimizer,feed_dict=feed_dict)
 
 #tf.app.flags.DEFINE_boolean("self_test", False, "True if running a self test.")
 #FLAGS = tf.app.flags.FLAGS
@@ -264,10 +276,6 @@ class AutoEncoder(object):
 #       staircase=True)
 #  
 # 	
-#   # Optimization
-#   optimizer = tf.train.GradientDescentOptimizer(learning_rate,use_locking=True).minimize(loss,
-#                                                        var_list=[weights], #TODO: put bias' back in.
-#                                                        global_step=batch)
 # 
 # 
 #   # Create a local session to run this computation.

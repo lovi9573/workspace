@@ -60,10 +60,44 @@ class LMDBDataProvider:
       return keys
   
     def shape(self):
-        return (self.batch_size, 3* self.crop_size**2)
+        return (self.batch_size, self.crop_size, self.crop_size,3)
 
     def get_mb_by_keys(self,keys):
-      pass
+      env = lmdb.open(self.source, readonly=True)
+      samples = np.zeros([len(keys), self.crop_size ** 2 * 3], dtype=np.float32)
+      num_label = -1      
+      with env.begin(write=False, buffers=False) as txn:
+        for i, key in zip(range(len(keys)), keys):
+          raw_dat = txn.get(key)
+          d = Datum()
+          d.ParseFromString(raw_dat) 
+          ori_size = np.sqrt(len(d.data) / 3)
+          im = np.fromstring(d.data, dtype=np.uint8).reshape([3, ori_size, ori_size]) - self.mean_data
+          [crop_h, crop_w] = np.random.randint(ori_size - self.crop_size, size=2)
+          im_cropped = im[:, crop_h:crop_h+self.crop_size, crop_w:crop_w+self.crop_size]
+          if self.mirror == True and numpy.random.rand() > 0.5:
+            im_cropped = im_cropped[:,:,::-1] 
+          samples[i, :] = np.transpose(im_cropped,[1,2,0]).reshape(self.crop_size ** 2 * 3).astype(np.float32)
+          
+          '''
+          #output
+          imgdata = np.zeros([self.crop_size, self.crop_size, 3], dtype=np.uint8)
+          imgdata[:,:,0] = im_cropped[2,:,:]
+          imgdata[:,:,1] = im_cropped[1,:,:]
+          imgdata[:,:,2] = im_cropped[0,:,:]
+          cropimg = Image.fromarray(imgdata)
+          nnn = '/home/tianjun/tests/img_%d.jpg' % (count)
+          cropimg.save(nnn, format = 'JPEG')
+          '''
+          
+          if num_label == -1:
+            num_label = len(d.label)
+            labels = np.zeros([self.batch_size, num_label], dtype=np.float32)
+          labels[i, :] = d.label
+      _shape = list(self.shape())
+      _shape[0] = len(keys)
+      return (np.reshape(samples, _shape), labels, keys)              
+          
           
     def get_mb(self, phase = 'TRAIN'):
         ''' Get next minibatch
@@ -90,7 +124,7 @@ class LMDBDataProvider:
                 if self.mirror == True and numpy.random.rand() > 0.5:
                     im_cropped = im_cropped[:,:,::-1]
                 
-                samples[count, :] = im_cropped.reshape(self.crop_size ** 2 * 3).astype(np.float32)
+                samples[count, :] = np.transpose(im_cropped,[1,2,0]).reshape(self.crop_size ** 2 * 3).astype(np.float32)
                 keys.append(key)
                
                 '''
@@ -111,11 +145,11 @@ class LMDBDataProvider:
                 
                 count = count + 1
                 if count == self.batch_size:
-                    yield (samples, labels, keys)
+                    yield (np.reshape(samples, self.shape() ), labels, keys)
                     keys = []
                     if phase == 'CHECK':
                         while True:
-                            yield(samples, labels, keys)
+                            yield(np.reshape(samples, self.shape() ), labels, keys)
                     
                     labels = np.zeros([self.batch_size, num_label], dtype=np.float32)
                     count = 0
@@ -156,7 +190,7 @@ class LMDBDataProvider:
                     im_cropped = im[:, crop_h:crop_h+self.crop_size, crop_w:crop_w+self.crop_size]
                     if i%2 == 1:
                         im_cropped = im_cropped[:,:,::-1]
-                    samples[i, count, :] = im_cropped.reshape(self.crop_size ** 2 * 3).astype(np.float32)
+                    samples[i, count, :] = np.transpose(im_cropped,[1,2,0]).reshape(self.crop_size ** 2 * 3).astype(np.float32)
                    
                 if num_label == -1:
                     num_label = len(d.label)

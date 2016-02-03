@@ -22,14 +22,12 @@ from operator import mul
 
 
 
-class LayerDef(object):
+class FCLayerDef(object):
     
-    def __init__(self,t, outdim):
-      self._type = t
+    def __init__(self, outdim):
       self._outdim = outdim
       self._indim = None
         
-    
     def outdim(self):
         return self._outdim
 
@@ -37,8 +35,33 @@ class LayerDef(object):
         return self._indim
       
     def instance(self):
-      if self._type == "FC":
         return FCLayer()
+
+  
+class ConvLayerDef(object):
+
+    def __init__(self,filterdim, stride, outdim):
+      self._outdim = outdim
+      self._filterdim = filterdim
+      self._stride = stride
+      self._indim = None
+        
+    def outdim(self):
+        return self._outdim
+
+    def indim(self):
+        return self._indim
+      
+    def filterdim(self):
+        return [self._filterdim,self._filterdim]
+      
+    def strides(self):
+        return [1,self._stride,self._stride,1]
+      
+    def instance(self):
+        return ConvLayer()
+  
+
     
 class Layer(object):
     
@@ -87,7 +110,7 @@ class FCLayer(Layer):
         '''
         :param d: A definition of layer parameters
         :param n: The layer number
-        :type d: LayerDef
+        :type d: FCLayerDef
         :type n: Integer
         '''
         self.d = d
@@ -113,6 +136,9 @@ class FCLayer(Layer):
         self.build()  
         
     def build(self):
+        '''
+        Constructs the computation graph for this layer and all subsequent layers.
+        '''
         if self.prev and self.next and self.d and self.prev != self: 
           indim = self.prev.top().get_shape().as_list()
           inflat = reduce(mul,indim[1:])
@@ -155,8 +181,77 @@ class FCLayer(Layer):
 class ConvLayer(Layer):
     
     def __init__(self,):
-        pass
+        self._top = None
+        self.next = None
+        self.prev = None
+        self.d = None
 
+    def set_params(self,d,n):
+        '''
+        :param d: A definition of layer parameters
+        :param n: The layer number
+        :type d: FCLayerDef
+        :type n: Integer
+        '''
+        self.d = d
+        self.n = n
+        self.build()        
+        
+    def set_next(self,n):
+        '''
+        :param l: The layer that feeds into this one
+        :type l: Layer
+        '''     
+        self.next = n
+        self.next._set_prev(self)
+        if n != self:
+            self.next._set_prev(self)    
+        
+    def _set_prev(self,l):
+        '''
+        :param l: The layer that feeds into this one
+        :type l: Layer
+        '''     
+        self.prev = l
+        self.build() 
+        
+    def build(self):
+        '''
+        Constructs the computation graph for this layer and all subsequent layers.
+        '''
+        if self.prev and self.next and self.d and self.prev != self: 
+          indim = self.prev.top().get_shape().as_list()
+          inflat = reduce(mul,indim[1:])
+          self.W = tf.Variable(
+                               tf.random_uniform(self.d.filterdim()+[indim[3], self.d.outdim()],
+                                                 minval=-4.0*math.sqrt(6.0/(inflat+ self.d.outdim())),
+                                                 maxval=4.0*math.sqrt(6.0/(inflat+ self.d.outdim())),
+                                                 dtype=tf.float32
+                                                 ),
+                               name='W_'+str(self.n))
+
+          self._top = tf.tanh(tf.nn.conv2d(self.prev.top(), self.W, self.d.strides(), "SAME"))
+          if self.next != self:
+              self.next.build()
+          else:
+              self.build_loop()
+
+    def build_loop(self):
+        self._recon = tf.tanh(tf.nn.deconv2d(self.top(), tf.transpose(self.W, [1,0,2,3] ), self.prev.top().get_shape().as_list(), self.d.strides()))
+        self.prev.build_rev()
+        
+    def build_rev(self):
+        self._recon = tf.tanh(tf.nn.deconv2d(self.next.recon(), tf.transpose(self.W ), self.prev.top().get_shape().as_list(), self.d.strides()))
+        self.prev.build_rev()
+        
+    def top(self):
+        return self._top
+    
+    def recon(self):
+        return self._recon
+      
+    def params(self):
+      return [self.W]
 
 class AutoEncoder(object):
     
@@ -165,7 +260,7 @@ class AutoEncoder(object):
         self.s = s
         self.layers = [DataLayer(self.dp)]
         self.bottom = self.layers[0].bottom()
-        self.LEARNING_RATE=0.9
+        self.LEARNING_RATE=0.1
         
     def add_layer(self,definition):
         l = definition.instance()

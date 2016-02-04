@@ -52,7 +52,7 @@ def map_img_2_col(columns):
     for i,column in columns.iteritems():
       outputs[:,i] = column.loss(mb[0])
       #outputs[:,i] = np.mean(np.max(np.max(act, axis=1), axis=1), axis=1)
-    maxvals = np.argmax(outputs,axis=1)
+    maxvals = np.argmin(outputs,axis=1)
     for key,col in zip(mb[2],maxvals):
       mapping[key] = col
       stats[col] += 1

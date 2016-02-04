@@ -72,7 +72,7 @@ class LMDBDataProvider:
           d = Datum()
           d.ParseFromString(raw_dat) 
           ori_size = np.sqrt(len(d.data) / 3)
-          im = np.fromstring(d.data, dtype=np.uint8).reshape([3, ori_size, ori_size]) - self.mean_data
+          im = (np.fromstring(d.data, dtype=np.uint8).reshape([3, ori_size, ori_size]).astype(np.float32) - self.mean_data)/127.0
           [crop_h, crop_w] = np.random.randint(ori_size - self.crop_size, size=2)
           im_cropped = im[:, crop_h:crop_h+self.crop_size, crop_w:crop_w+self.crop_size]
           if self.mirror == True and numpy.random.rand() > 0.5:
@@ -113,7 +113,7 @@ class LMDBDataProvider:
                 d = Datum()
                 d.ParseFromString(value)
                 ori_size = np.sqrt(len(d.data) / 3)
-                im = np.fromstring(d.data, dtype=np.uint8).reshape([3, ori_size, ori_size]) - self.mean_data
+                im = (np.fromstring(d.data, dtype=np.uint8).reshape([3, ori_size, ori_size]).astype(np.float32) - self.mean_data)/127.0
                 if phase == 'TRAIN':
                     [crop_h, crop_w] = np.random.randint(ori_size - self.crop_size, size=2)
                 else:

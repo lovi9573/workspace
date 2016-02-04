@@ -61,7 +61,8 @@ class ConvLayerDef(object):
     def instance(self):
         return ConvLayer()
   
-
+    def __str__(self):
+      return "Convolutional layer {}x{} stride {}".format(self._filterdim, self._filterdim,self._stride)
     
 class Layer(object):
     
@@ -229,8 +230,13 @@ class ConvLayer(Layer):
                                                  dtype=tf.float32
                                                  ),
                                name='W_'+str(self.n))
-
-          self._top = tf.tanh(tf.nn.conv2d(self.prev.top(), self.W, self.d.strides(), "SAME"))
+          self.bias = tf.Variable(
+                                  tf.random_uniform([self.d.outdim()],
+                                                    minval = -0.5,
+                                                    maxval = 0.5,
+                                                    dtype=tf.float32)
+                                  )
+          self._top = tf.tanh(tf.nn.conv2d(self.prev.top(), self.W, self.d.strides(), "SAME")+self.bias)
           if self.next != self:
               self.next.build()
           else:
@@ -241,7 +247,7 @@ class ConvLayer(Layer):
         self.prev.build_rev()
         
     def build_rev(self):
-        self._recon = tf.tanh(tf.nn.deconv2d(self.next.recon(), tf.transpose(self.W ), self.prev.top().get_shape().as_list(), self.d.strides()))
+        self._recon = tf.tanh(tf.nn.deconv2d(self.next.recon(), tf.transpose(self.W, [1,0,3,2] ), self.prev.top().get_shape().as_list(), self.d.strides()))
         self.prev.build_rev()
         
     def top(self):
@@ -251,7 +257,7 @@ class ConvLayer(Layer):
         return self._recon
       
     def params(self):
-      return [self.W]
+      return [self.W,self.bias]
 
 class AutoEncoder(object):
     
@@ -260,7 +266,7 @@ class AutoEncoder(object):
         self.s = s
         self.layers = [DataLayer(self.dp)]
         self.bottom = self.layers[0].bottom()
-        self.LEARNING_RATE=0.1
+        self.LEARNING_RATE=0.001
         
     def add_layer(self,definition):
         l = definition.instance()
@@ -270,19 +276,32 @@ class AutoEncoder(object):
         self.layers.append(l)
         l.build()
         self.top = self.layers[-1].top()
-        self.recon = self.layers[0].recon()
-        self.loss = tf.pow(self.recon - self.bottom,2)
+        self._recon = self.layers[0].recon()
+        self._loss = tf.reduce_sum(tf.pow(self._recon - self.bottom,2))
         # Optimization
         self.optimizer = tf.train.GradientDescentOptimizer(self.LEARNING_RATE,use_locking=True) \
-                                  .minimize(self.loss, var_list=[w for l in self.layers for w in l.params()])
+                                  .minimize(self._loss, var_list=[w for l in self.layers for w in l.params()])
                                                           
     
     def fwd(self,data):
       return self.s.run(self.top, feed_dict={self.bottom:data})
+    
+    def recon(self,data):
+          feed_dict = {self.bottom:data}
+          _recon = self.s.run(self._recon,feed_dict=feed_dict)
+          return (data,_recon)    
+       
+    def loss(self,data):
+        feed_dict = {self.bottom:data}
+        l = self.s.run(self._loss,feed_dict=feed_dict)
+        return l
         
     def encode_mb(self,data): 
           feed_dict = {self.bottom:data}
-          self.s.run(self.optimizer,feed_dict=feed_dict)
+          dummy, l = self.s.run([self.optimizer,self._loss],feed_dict=feed_dict)
+          #print("_loss: {}".format(_loss))
+          return l
+          
 
 #tf.app.flags.DEFINE_boolean("self_test", False, "True if running a self test.")
 #FLAGS = tf.app.flags.FLAGS
@@ -359,7 +378,7 @@ class AutoEncoder(object):
 #   err_cost = cross_entropy(v,r)
 #   sparsity = sparsity_learning_rate*kl(SPARSITY_TARGET,tf.reduce_mean(h,0))
 #   weight_cost = LAMBDA*weight_decay(weights,bias_v,bias_h)
-#   loss = err_cost + sparsity + weight_cost
+#   _loss = err_cost + sparsity + weight_cost
 #           
 #   
 #   # Learning rate scheduling
@@ -386,7 +405,7 @@ class AutoEncoder(object):
 #       batch_data = train_data[offset:(offset + BATCH_SIZE), :]
 #       feed_dict = {visible: batch_data, corruption_level:step/(num_epochs * train_size // BATCH_SIZE)}
 #       _, l, lr,slr = s.run(
-#           [optimizer, loss, learning_rate,sparsity_learning_rate],
+#           [optimizer, _loss, learning_rate,sparsity_learning_rate],
 #           feed_dict=feed_dict)
 #       e = s.run(err_cost,feed_dict=feed_dict)
 #       sp = s.run(sparsity,feed_dict=feed_dict)
@@ -396,7 +415,7 @@ class AutoEncoder(object):
 #       costs["weight"].append(w)
 #       if step % REPORT == 0:
 #         print('Epoch %.2f' % (float(step) * BATCH_SIZE / train_size))
-#         print('Minibatch loss:(err,sparsity,weight) %.3f: %3f,%3f,%3f   learning rate: %.6f, sparsity_lr %.6f' % (l, e, sp, w, lr, slr))
+#         print('Minibatch _loss:(err,sparsity,weight) %.3f: %3f,%3f,%3f   learning rate: %.6f, sparsity_lr %.6f' % (l, e, sp, w, lr, slr))
 #       if step == display_step or (step+1)%(1*train_size // BATCH_SIZE) == 0:
 #         #display(s.run(visiblevar).reshape([BATCH_SIZE,28,28,1]))
 #         ht = s.run(h,feed_dict=feed_dict).reshape([1,BATCH_SIZE,NUM_HIDDEN,1])
@@ -420,4 +439,28 @@ class AutoEncoder(object):
 #         
 
 if __name__ == '__main__':
+  class Object:
     pass
+  from dataio import LMDBDataProvider
+  
+  N_COLUMNS = 3
+  N_STEPS = 1
+  LAYERS = [ConvLayerDef(3,1,128)]
+  DATA_PARAM = Object()
+  DATA_PARAM.batch_size = 128
+  TRANSFORM_PARAM = Object()
+  TRANSFORM_PARAM.mean_file = ""
+  TRANSFORM_PARAM.mean_value = [127,127,127]
+  TRANSFORM_PARAM.crop_size = 225
+  TRANSFORM_PARAM.mirror = False
+  DATA_PARAM.source = sys.argv[1]
+  dp = LMDBDataProvider(DATA_PARAM,TRANSFORM_PARAM )
+  with tf.Session() as s:
+    ae = AutoEncoder(s,dp)
+    ae.add_layer(ConvLayerDef(11,7,64))
+    tf.initialize_all_variables().run()
+    for mb in dp.get_mb():
+      for e in range(200):
+        print("Epoch {}".format(e))
+        print(ae.encode_mb(mb[0]))
+  

@@ -16,14 +16,14 @@ from weights_to_img import display
 class Object:
     pass
 
-N_COLUMNS = 3
-N_STEPS = 2
-LAYERS = [ConvLayerDef(5,4,2)]
+N_COLUMNS = 2
+N_STEPS = 1
+LAYERS = [ConvLayerDef(1,1,64)]
 DATA_PARAM = Object()
-DATA_PARAM.batch_size = 16
+DATA_PARAM.batch_size = 32
 TRANSFORM_PARAM = Object()
 TRANSFORM_PARAM.mean_file = ""
-TRANSFORM_PARAM.mean_value = [0,0,0]
+TRANSFORM_PARAM.mean_value = [127,127,127]
 TRANSFORM_PARAM.crop_size = 225
 TRANSFORM_PARAM.mirror = False
 
@@ -50,8 +50,8 @@ def map_img_2_col(columns):
   outputs = np.zeros([DATA_PARAM.batch_size, len(columns)])
   for mb in dp.get_mb():
     for i,column in columns.iteritems():
-      act = column.fwd(mb[0])
-      outputs[:,i] = np.max(np.max(np.max(act, axis=1), axis=1), axis=1)
+      outputs[:,i] = column.loss(mb[0])
+      #outputs[:,i] = np.mean(np.max(np.max(act, axis=1), axis=1), axis=1)
     maxvals = np.argmax(outputs,axis=1)
     for key,col in zip(mb[2],maxvals):
       mapping[key] = col
@@ -59,10 +59,11 @@ def map_img_2_col(columns):
   #print "Mapping Stats: ",stats
   return mapping
 
-def encode(imap, columns, epochs):
+def encode(imap, columns, epochs, epoch_num):
     datas = [np.zeros(dp.shape()) for i in columns]
     indicies = [0 for i in columns]
-    for e in range(epochs):
+    for e in range(epoch_num,epoch_num+epochs):
+        print "Epoch: {}".format(e)
         for mb in dp.get_mb():
             #print len(mb)
             for i in range(len(mb[2])):
@@ -95,21 +96,33 @@ if __name__ == '__main__':
     with tf.Session() as s:
       for i in range(N_COLUMNS):
         columns[i] = AutoEncoder(s,dp)
-      print columns
+      print "Columns Initialized"
       #Iterate over layer definitions to build a column
       for l in LAYERS:
         for column in columns.values():
           column.add_layer(l)
+        print "{} added".format(l)
         tf.initialize_all_variables().run()
+        for mb in dp.get_mb():
+          for column in columns.values():
+            column.encode_mb(mb[0])
+        print "Columns trained on all data 1 epoch"
         immap_old = None
         immap = map_img_2_col(columns)
         #Train current layer depth until convergence.
         epoch_num = 0
-        while(not stationary(immap, immap_old, 0.9)):
-          print "Epoch: {}".format(epoch_num)
-          encode(immap, columns, N_STEPS)
-          epoch_num += N_STEPS
+        while(not stationary(immap, immap_old, 0.95)):
           print "Mapping Distribution",mapping_stats(immap)
+          encode(immap, columns, N_STEPS, epoch_num)
+          print "Encoding complete"
+          for i in range(len(columns)):
+            d,r = columns[i].recon(dp.get_mb().next()[0])
+            #print(d[1,100:110,100:110,0])
+            #print(r[1,100:110,100:110,0])
+            plt.imshow(np.append(d[1],r[1],axis=0)[:,:,0], cmap="Greys")
+            plt.show()
+          epoch_num += N_STEPS
+          N_STEPS += 1
           immap_old = immap
           immap = map_img_2_col(columns)
         for i in range(len(columns)):
@@ -126,7 +139,7 @@ if __name__ == '__main__':
             plt.show()
           except StopIteration:
             pass
-          display(s.run(columns[i].layers[-1].W))
+          display(s.run(columns[i].layers[-1].W).transpose([3,0,1,2]))
             
 #     
 # #   dat = dp.get_mb()

@@ -34,7 +34,8 @@ if __name__ == '__main__':
     DATA_PARAM.source = sys.argv[1]
     dp = LMDBDataProvider(DATA_PARAM,TRANSFORM_PARAM )
     mb = dp.get_mb().next()
-    i = np.array([1,0,2])
+    i = np.array([2,1,0])
     for im in mb[0]:
+      print "min: {}, max: {}".format(np.min(im),np.max(im))
       plt.imshow(im[:,:,i], cmap='Greys')
       plt.show()

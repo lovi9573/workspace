@@ -266,7 +266,7 @@ class AutoEncoder(object):
         self.s = s
         self.layers = [DataLayer(self.dp)]
         self.bottom = self.layers[0].bottom()
-        self.LEARNING_RATE=0.001
+        self.LEARNING_RATE=0.1
         
     def add_layer(self,definition):
         l = definition.instance()

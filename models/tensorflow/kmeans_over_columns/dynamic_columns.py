@@ -18,7 +18,7 @@ class Object:
 
 N_COLUMNS = 2
 N_STEPS = 1
-LAYERS = [ConvLayerDef(1,1,64)]
+LAYERS = [ConvLayerDef(11,5,4)]
 DATA_PARAM = Object()
 DATA_PARAM.batch_size = 32
 TRANSFORM_PARAM = Object()

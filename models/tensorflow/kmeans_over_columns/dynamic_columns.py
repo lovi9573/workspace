@@ -18,14 +18,15 @@ class Object:
 
 N_COLUMNS = 2
 N_STEPS = 1
-LAYERS = [ConvLayerDef(11,5,4)]
+LAYERS = [ConvLayerDef(11,5,1)]
 DATA_PARAM = Object()
-DATA_PARAM.batch_size = 32
+DATA_PARAM.batch_size = 128
 TRANSFORM_PARAM = Object()
 TRANSFORM_PARAM.mean_file = ""
 TRANSFORM_PARAM.mean_value = [127,127,127]
 TRANSFORM_PARAM.crop_size = 225
 TRANSFORM_PARAM.mirror = False
+PRETRAIN_EPOCHS=0
 
 def converged(a, b):
   if a == None or b == None:
@@ -103,10 +104,11 @@ if __name__ == '__main__':
           column.add_layer(l)
         print "{} added".format(l)
         tf.initialize_all_variables().run()
-        for mb in dp.get_mb():
-          for column in columns.values():
-            column.encode_mb(mb[0])
-        print "Columns trained on all data 1 epoch"
+        for i in range(PRETRAIN_EPOCHS):
+          for mb in dp.get_mb():
+            for column in columns.values():
+              column.encode_mb(mb[0])
+        print "Columns trained on all data {} epochS".format(PRETRAIN_EPOCHS)
         immap_old = None
         immap = map_img_2_col(columns)
         #Train current layer depth until convergence.

@@ -17,7 +17,7 @@ from six.moves import xrange  # pylint: disable=redefined-builtin
 import tensorflow as tf
 import math
 import matplotlib.pyplot as plt
-from operator import mul
+from operator import mul,add
 
 
 
@@ -141,8 +141,8 @@ class FCLayer(Layer):
         Constructs the computation graph for this layer and all subsequent layers.
         '''
         if self.prev and self.next and self.d and self.prev != self: 
-          indim = self.prev.top().get_shape().as_list()
-          inflat = reduce(mul,indim[1:])
+          self._indim = self.prev.top().get_shape().as_list()
+          inflat = reduce(mul,self._indim[1:])
           self.W = tf.Variable(
                                tf.random_uniform([inflat, self.d.outdim()],
                                                  minval=-4.0*math.sqrt(6.0/(inflat+ self.d.outdim())),
@@ -153,18 +153,20 @@ class FCLayer(Layer):
           self.bias = tf.Variable(
                                   tf.zeros([self.d.outdim()]),
                                   name='b_'+str(self.n))
-          self._top = tf.sigmoid(tf.matmul(self.prev.top(),self.W)+self.bias)
+          print(self.W.get_shape().with_rank(2))
+          flat_in = tf.reshape(self.prev.top(),[self._indim[0],-1])
+          self._top = tf.tanh(tf.matmul(flat_in,self.W))
           if self.next != self:
               self.next.build()
           else:
               self.build_loop()
                 
     def build_loop(self):
-        self._recon = tf.sigmoid(tf.matmul(self.top(),tf.transpose(self.W)))
+        self._recon = tf.reshape(tf.tanh(tf.matmul(self.top(),tf.transpose(self.W))),self._indim)
         self.prev.build_rev()
         
     def build_rev(self):
-        self._recon = tf.sigmoid(tf.matmul(self.next.recon(),tf.transpose(self.W)))
+        self._recon = tf.reshape(tf.tanh(tf.matmul(self.next.recon(),tf.transpose(self.W))),self._indim)
         self.prev.build_rev()
         
     def top(self):
@@ -247,7 +249,7 @@ class ConvLayer(Layer):
         self.prev.build_rev()
         
     def build_rev(self):
-        self._recon = tf.tanh(tf.nn.deconv2d(self.next.recon(), tf.transpose(self.W, [1,0,3,2] ), self.prev.top().get_shape().as_list(), self.d.strides()))
+        self._recon = tf.tanh(tf.nn.deconv2d(self.next.recon(), tf.transpose(self.W, [1,0,2,3] ), self.prev.top().get_shape().as_list(), self.d.strides()))
         self.prev.build_rev()
         
     def top(self):
@@ -267,6 +269,7 @@ class AutoEncoder(object):
         self.layers = [DataLayer(self.dp)]
         self.bottom = self.layers[0].bottom()
         self.LEARNING_RATE=0.1
+        self.alpha = 0.0
         
     def add_layer(self,definition):
         l = definition.instance()
@@ -277,9 +280,11 @@ class AutoEncoder(object):
         l.build()
         self.top = self.layers[-1].top()
         self._recon = self.layers[0].recon()
-        self._loss = tf.reduce_sum(tf.pow(self._recon - self.bottom,2))
+        reconstruction_loss = tf.reduce_mean(tf.pow(self._recon - self.bottom,2))
+        weight_decay = reduce(add,[tf.reduce_sum(tf.pow(w,2)) for l in self.layers for w in l.params()])
+        self._loss = reconstruction_loss + self.alpha*weight_decay
         # Optimization
-        self.optimizer = tf.train.GradientDescentOptimizer(self.LEARNING_RATE,use_locking=True) \
+        self.optimizer = tf.train.MomentumOptimizer(self.LEARNING_RATE,0.9,use_locking=True) \
                                   .minimize(self._loss, var_list=[w for l in self.layers for w in l.params()])
                                                           
     
@@ -442,12 +447,11 @@ if __name__ == '__main__':
   class Object:
     pass
   from dataio import LMDBDataProvider
-  
+  import numpy as np
   N_COLUMNS = 3
   N_STEPS = 1
-  LAYERS = [ConvLayerDef(3,1,128)]
   DATA_PARAM = Object()
-  DATA_PARAM.batch_size = 128
+  DATA_PARAM.batch_size = 16
   TRANSFORM_PARAM = Object()
   TRANSFORM_PARAM.mean_file = ""
   TRANSFORM_PARAM.mean_value = [127,127,127]
@@ -457,10 +461,19 @@ if __name__ == '__main__':
   dp = LMDBDataProvider(DATA_PARAM,TRANSFORM_PARAM )
   with tf.Session() as s:
     ae = AutoEncoder(s,dp)
-    ae.add_layer(ConvLayerDef(11,7,64))
+    ae.add_layer(ConvLayerDef(3,1,32))
+    ae.add_layer(ConvLayerDef(3,1,32))
+    ae.add_layer(ConvLayerDef(3,1,32))
+    #ae.add_layer(FCLayerDef(64))
     tf.initialize_all_variables().run()
     for mb in dp.get_mb():
       for e in range(200):
         print("Epoch {}".format(e))
         print(ae.encode_mb(mb[0]))
+        if e%10 == 0:
+          d,r = ae.recon(mb[0])
+          plt.imshow(np.append(d[0],r[0],axis=0)[:,:,0], cmap="Greys")
+          plt.colorbar()
+          plt.show()
+        
   

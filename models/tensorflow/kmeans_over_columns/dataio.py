@@ -12,6 +12,7 @@ import numpy.random
 import scipy.io as si
 from PIL import Image
 from google.protobuf import text_format
+import cPickle
 
 from caffe import *
 
@@ -43,6 +44,12 @@ class LMDBDataProvider:
         self.crop_size = transform_param.crop_size
         self.mirror = transform_param.mirror
 
+    def normalize(self,raw_image):
+      return (raw_image.astype(np.float32) - self.mean_data)/127.0
+    
+    def denormalize(self,normal_image):
+      return (normal_image*127.0 +127).astype(np.uint8)
+
     def get_n_examples(self):
       env = lmdb.open(self.source, readonly=True)
       with env.begin(write=False, buffers=False) as txn:
@@ -72,7 +79,7 @@ class LMDBDataProvider:
           d = Datum()
           d.ParseFromString(raw_dat) 
           ori_size = np.sqrt(len(d.data) / 3)
-          im = (np.fromstring(d.data, dtype=np.uint8).reshape([3, ori_size, ori_size]).astype(np.float32) - self.mean_data)/127.0
+          im = self.normalize(np.fromstring(d.data, dtype=np.uint8).reshape([3, ori_size, ori_size]))
           [crop_h, crop_w] = np.random.randint(ori_size - self.crop_size, size=2)
           im_cropped = im[:, crop_h:crop_h+self.crop_size, crop_w:crop_w+self.crop_size]
           if self.mirror == True and numpy.random.rand() > 0.5:
@@ -113,7 +120,7 @@ class LMDBDataProvider:
                 d = Datum()
                 d.ParseFromString(value)
                 ori_size = np.sqrt(len(d.data) / 3)
-                im = (np.fromstring(d.data, dtype=np.uint8).reshape([3, ori_size, ori_size]).astype(np.float32) - self.mean_data)/127.0
+                im = self.normalize(np.fromstring(d.data, dtype=np.uint8).reshape([3, ori_size, ori_size]))
                 if phase == 'TRAIN':
                     [crop_h, crop_w] = np.random.randint(ori_size - self.crop_size, size=2)
                 else:
@@ -182,7 +189,7 @@ class LMDBDataProvider:
                     start_h = [0, diff_size, 0, diff_size, diff_size/2]
                     start_w = [0, 0, diff_size, diff_size, diff_size/2]
 
-                im = np.fromstring(d.data, dtype=np.uint8).reshape([3, ori_size, ori_size]) - self.mean_data
+                im = self.normalize(np.fromstring(d.data, dtype=np.uint8).reshape([3, ori_size, ori_size]))
                 
                 for i in range(view_num):
                     crop_h = start_h[i/2]
@@ -209,3 +216,108 @@ class LMDBDataProvider:
             left_labels = np.delete(labels, delete_idx, 0)
             for i in range(view_num):
                 yield (left_samples[i,:,:], left_labels)
+                
+class CifarDataProvider:
+  
+  def __init__(self, data_param, transform_param, mm_batch_num=1):
+    bp = BlobProto()
+    if len(transform_param.mean_file) == 0:
+        self.mean_data = np.ones([3, 32, 32], dtype=np.float32)
+        assert(len(transform_param.mean_value) == 3)
+        self.mean_data[0] = transform_param.mean_value[0]
+        self.mean_data[1] = transform_param.mean_value[1]
+        self.mean_data[2] = transform_param.mean_value[2]           
+    else:
+        with open(transform_param.mean_file, 'rb') as f:
+            bp.ParseFromString(f.read())
+        mean_narray = np.array(bp.data, dtype=np.float32)
+        h_w = np.sqrt(np.shape(mean_narray)[0] / 3)
+        self.mean_data = np.array(bp.data, dtype=np.float32).reshape([3, h_w, h_w])
+    self.files = data_param.source
+    self.batch_size = data_param.batch_size / mm_batch_num
+    self.crop_size = transform_param.crop_size
+    self.mirror = transform_param.mirror
+    self._dat = {"filename":""}
+
+  def get_n_examples(self):
+    return 10000*len(self.files)
+   
+  def get_keys(self):
+    keys = []
+    for f in self.files:
+      for i in xrange(10000):
+            keys.append(f+"_ex{:>4}".format(i))
+    return keys
+
+  def shape(self):
+      return (self.batch_size, self.crop_size, self.crop_size,3)
+
+  def normalize(self,raw_image):
+    return (raw_image.astype(np.float32) - self.mean_data)/127.0
+  
+  def denormalize(self,normal_image):
+    return (normal_image*127.0 +127).astype(np.uint8)
+
+  def get_mb_by_keys(self,keys):
+    samples = np.zeros([len(keys), self.crop_size,self.crop_size,3], dtype=np.float32)
+    labels = np.zeros([len(keys)],dtype=np.uint8)
+    sorted_keys = sorted(keys)
+    for n,key in enumerate(sorted_keys):
+      fname,i = key.split("_ex")
+      if fname != self._dat['filename']:
+        fo = open(fname, 'rb')
+        self._dat = cPickle.load(fo)
+        self._dat['filename'] = fname
+        fo.close()
+      mb = self._dat["data"][i,:]
+      mb_4 = mb.reshape([1,3,32,32])
+      mb_n = self.normalize(mb_4)
+      mb_t = mb_n.transpose([0,2,3,1])
+      dx,dy = np.random.randint(32 - self.crop_size+1, size=2)
+      samples[n,:] = mb_t[:,dx:dx+self.crop_size,dy:dy+self.crop_size,:]
+      labels[n] = self._dat["labels"][int(i)]
+      return (samples,labels,keys)
+    
+
+  def get_mb(self):
+    samples = np.zeros([self.batch_size, self.crop_size,self.crop_size,3], dtype=np.float32)
+    labels = np.zeros([self.batch_size])
+    for filename in self.files:
+      fo = open(filename, 'rb')
+      datadict = cPickle.load(fo)
+      fo.close()
+      i = 0
+      while i < (10000 - self.batch_size):
+        mb = datadict["data"][i:i+self.batch_size,:]
+        mb_4 = mb.reshape([self.batch_size,3,32,32])
+        mb_n = self.normalize(mb_4)
+        mb_t = mb_n.transpose([0,2,3,1])
+        dx,dy = np.random.randint(32 - self.crop_size+1, size=2)
+        samples = mb_t[:,dx:dx+self.crop_size,dy:dy+self.crop_size,:]
+        labels = datadict["labels"][i:i+self.batch_size]
+        keys = []
+        for n in range(self.batch_size):
+          keys.append(filename+"_ex{:>4}".format(i+n))
+        yield (samples,labels,keys)
+        i += self.batch_size
+          
+        
+          
+if __name__ == "__main__":
+  import matplotlib.pyplot as plt
+  class Object:
+    pass
+  DATA_PARAM = Object()
+  DATA_PARAM.batch_size = 16
+  TRANSFORM_PARAM = Object()
+  TRANSFORM_PARAM.mean_file = ""
+  TRANSFORM_PARAM.mean_value = [127,127,127]
+  TRANSFORM_PARAM.crop_size = 16
+  TRANSFORM_PARAM.mirror = False
+  DATA_PARAM.source = sys.argv[1:]
+  dp = CifarDataProvider(DATA_PARAM,TRANSFORM_PARAM )
+  for d,l,k in dp.get_mb(8):
+    print k
+#     plt.imshow(dp.denormalize(d[0]))
+#     plt.colorbar()
+#     plt.show()      

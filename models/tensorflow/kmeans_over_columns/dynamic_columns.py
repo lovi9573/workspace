@@ -4,7 +4,7 @@ Created on Jan 13, 2016
 @author: jlovitt
 '''
 import sys
-from dataio import LMDBDataProvider
+from dataio import LMDBDataProvider, CifarDataProvider
 from matplotlib import pyplot as plt
 from matplotlib import image as mpimg
 from sigmoid_autoencoder import *
@@ -18,15 +18,33 @@ class Object:
 
 N_COLUMNS = 2
 N_STEPS = 1
-LAYERS = [ConvLayerDef(11,5,1)]
+LAYERS = [{"Layerdef":ConvLayerDef(3,1,16),
+           "Pretrain_epochs":10,
+           "Convergence_threshold":0.0},
+          {"Layerdef":ConvLayerDef(3,1,16),
+           "Pretrain_epochs":10,
+           "Convergence_threshold":0.0},
+#           {"Layerdef":ConvLayerDef(3,1,24),
+#            "Pretrain_epochs":3,
+#            "Convergence_threshold":0.0},
+#           {"Layerdef":ConvLayerDef(3,1,32),
+#            "Pretrain_epochs":4,
+#            "Convergence_threshold":0.0},
+#           {"Layerdef":ConvLayerDef(3,1,32),
+#            "Pretrain_epochs":5,
+#            "Convergence_threshold":0.0},
+          {"Layerdef":ConvLayerDef(3,1,3),
+           "Pretrain_epochs":30,
+           "Convergence_threshold":0.99}]
 DATA_PARAM = Object()
 DATA_PARAM.batch_size = 128
 TRANSFORM_PARAM = Object()
 TRANSFORM_PARAM.mean_file = ""
 TRANSFORM_PARAM.mean_value = [127,127,127]
-TRANSFORM_PARAM.crop_size = 225
+TRANSFORM_PARAM.crop_size = 32
 TRANSFORM_PARAM.mirror = False
-PRETRAIN_EPOCHS=0
+NUM_LABELS = 10
+SHOW = False
 
 def converged(a, b):
   if a == None or b == None:
@@ -35,6 +53,8 @@ def converged(a, b):
     return a == b
 
 def stationary(a,b,thresh):
+  if thresh*len(a) < 1.0:
+    return True
   if a == None or b == None:
     return False
   matches = 0
@@ -90,43 +110,50 @@ if __name__ == '__main__':
     if len(sys.argv) != 2:
       print "Usage: python dynamic_columns.py <path to lmdb data>"
       sys.exit(-1)
-    DATA_PARAM.source = sys.argv[1]
-    dp = LMDBDataProvider(DATA_PARAM,TRANSFORM_PARAM )
+    DATA_PARAM.source = sys.argv[1:]
+    dp = CifarDataProvider(DATA_PARAM,TRANSFORM_PARAM )
     imgkeys = dp.get_keys()
     columns = {}
     with tf.Session() as s:
       for i in range(N_COLUMNS):
         columns[i] = AutoEncoder(s,dp)
       print "Columns Initialized"
+      
       #Iterate over layer definitions to build a column
       for l in LAYERS:
         for column in columns.values():
-          column.add_layer(l)
-        print "{} added".format(l)
+          column.add_layer(l['Layerdef'])
+        print "{} added".format(l['Layerdef'])
         tf.initialize_all_variables().run()
-        for i in range(PRETRAIN_EPOCHS):
+        
+        #Pretrain on all data
+        for i in range(l['Pretrain_epochs']):
+          print("Pretrain epoch {}".format(i))
+          losses = dict([(col,[]) for col in columns.keys()])
           for mb in dp.get_mb():
-            for column in columns.values():
-              column.encode_mb(mb[0])
-        print "Columns trained on all data {} epochS".format(PRETRAIN_EPOCHS)
+            for colnum,column in columns.iteritems():
+              losses[colnum].append(column.encode_mb(mb[0]))
+          print("\tAve loss: {}".format([str(c)+":"+str(reduce(add,los)/len(los)) for c,los in losses.iteritems()]))
+        print "All columns trained on all data {} epochs".format(l['Pretrain_epochs'])
         immap_old = None
         immap = map_img_2_col(columns)
         #Train current layer depth until convergence.
         epoch_num = 0
-        while(not stationary(immap, immap_old, 0.95)):
-          print "Mapping Distribution",mapping_stats(immap)
+        while(not stationary(immap, immap_old, l['Convergence_threshold'])):
+          print("Mapping Distribution" + str(mapping_stats(immap)))
           encode(immap, columns, N_STEPS, epoch_num)
           print "Encoding complete"
-          for i in range(len(columns)):
-            d,r = columns[i].recon(dp.get_mb().next()[0])
+          #for i in range(len(columns)):
+            #d,r = columns[i].recon(dp.get_mb().next()[0])
             #print(d[1,100:110,100:110,0])
             #print(r[1,100:110,100:110,0])
-            plt.imshow(np.append(d[1],r[1],axis=0)[:,:,0], cmap="Greys")
-            plt.show()
+            #plt.imshow(np.append(d[1],r[1],axis=0)[:,:,0], cmap="Greys")
+            #plt.show()
           epoch_num += N_STEPS
           N_STEPS += 1
           immap_old = immap
           immap = map_img_2_col(columns)
+      if SHOW:
         for i in range(len(columns)):
           print "Example for column {}".format(i)
           key = None
@@ -137,12 +164,23 @@ if __name__ == '__main__':
               if immap[k] == i:
                 key = k
             sample = dp.get_mb_by_keys([key])
-            plt.imshow(sample[0][0,:])
+            plt.imshow(dp.denormalize(sample[0][0,:]))
             plt.show()
           except StopIteration:
             pass
-          display(s.run(columns[i].layers[-1].W).transpose([3,0,1,2]))
-            
+          #display(dp.denormalize(s.run(columns[i].layers[-1].W).transpose([3,0,1,2])))
+        
+      #Get column entropy
+      columnlabels = dict([(col,[0]*NUM_LABELS) for col in columns.keys()])
+      for key,col in immap.iteritems():
+        _,l,_ = dp.get_mb_by_keys([key])
+        columnlabels[col][l[0]] += 1
+      for col,dat in columnlabels.iteritems():
+        print ("==============="+str(col)+"======================")
+        print (dat)
+      
+        
+          
 #     
 # #   dat = dp.get_mb()
 # #   for d in dat:

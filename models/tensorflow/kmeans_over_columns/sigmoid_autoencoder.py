@@ -37,6 +37,8 @@ class FCLayerDef(object):
     def instance(self):
         return FCLayer()
 
+    def __str__(self):
+      return "Fully Connected layer with output size {}".format(self._outdim)
   
 class ConvLayerDef(object):
 
@@ -62,12 +64,17 @@ class ConvLayerDef(object):
         return ConvLayer()
   
     def __str__(self):
-      return "Convolutional layer {}x{} stride {}".format(self._filterdim, self._filterdim,self._stride)
+      return "Convolutional layer {}x{}x{} stride {}".format(self._filterdim, self._filterdim,self._outdim,self._stride)
+  
+"""
+==========================================================================================================
+  Layer Implementations
+==========================================================================================================
+"""
     
 class Layer(object):
-    
-    def params(self):
-      return []
+  def params(self):
+    return []
 
 class DataLayer(Layer):
     
@@ -97,44 +104,56 @@ class DataLayer(Layer):
     
     def bottom(self):
       return self.datalayer 
+    
+    def params(self):
+      return []
+ 
+class FeedThroughLayer(Layer):
+    
+  def __init__(self,):
+      self._top = None
+      self._recon = None
+      self.next = None
+      self.prev = None
+      self.d = None
+
+  def set_params(self,d,n):
+      '''
+      :param d: A definition of layer parameters
+      :param n: The layer number
+      :type d: FCLayerDef
+      :type n: Integer
+      '''
+      self.d = d
+      self.n = n
+      self.build()        
+      
+  def set_next(self,n):
+      '''
+      :param l: The layer that feeds into this one
+      :type l: Layer
+      '''     
+      self.next = n
+      self.next._set_prev(self)
+      if n != self:
+          self.next._set_prev(self)    
+      
+  def _set_prev(self,l):
+      '''
+      :param l: The layer that feeds into this one
+      :type l: Layer
+      '''     
+      self.prev = l
+      self.build()   
+   
+  def top(self):
+      return self._top
+  
+  def recon(self):
+      return self._recon  
       
 
-class FCLayer(Layer):
-
-    def __init__(self):
-        self._top = None
-        self.next = None
-        self.prev = None
-        self.d = None
-    
-    def set_params(self,d,n):
-        '''
-        :param d: A definition of layer parameters
-        :param n: The layer number
-        :type d: FCLayerDef
-        :type n: Integer
-        '''
-        self.d = d
-        self.n = n
-        self.build()
- 
-    def set_next(self,n):
-        '''
-        :param l: The layer that feeds into this one
-        :type l: Layer
-        '''     
-        self.next = n
-        self.next._set_prev(self)
-        if n != self:
-            self.next._set_prev(self)    
-        
-    def _set_prev(self,l):
-        '''
-        :param l: The layer that feeds into this one
-        :type l: Layer
-        '''     
-        self.prev = l
-        self.build()  
+class FCLayer(FeedThroughLayer): 
         
     def build(self):
         '''
@@ -153,7 +172,7 @@ class FCLayer(Layer):
           self.bias = tf.Variable(
                                   tf.zeros([self.d.outdim()]),
                                   name='b_'+str(self.n))
-          print(self.W.get_shape().with_rank(2))
+          #print(self.W.get_shape().with_rank(2))
           flat_in = tf.reshape(self.prev.top(),[self._indim[0],-1])
           self._top = tf.tanh(tf.matmul(flat_in,self.W))
           if self.next != self:
@@ -168,55 +187,15 @@ class FCLayer(Layer):
     def build_rev(self):
         self._recon = tf.reshape(tf.tanh(tf.matmul(self.next.recon(),tf.transpose(self.W))),self._indim)
         self.prev.build_rev()
-        
-    def top(self):
-        return self._top
-    
-    def recon(self):
-        return self._recon
-      
+
     def params(self):
       return [self.W, self.bias]
     
     
 
 
-class ConvLayer(Layer):
-    
-    def __init__(self,):
-        self._top = None
-        self.next = None
-        self.prev = None
-        self.d = None
+class ConvLayer(FeedThroughLayer):
 
-    def set_params(self,d,n):
-        '''
-        :param d: A definition of layer parameters
-        :param n: The layer number
-        :type d: FCLayerDef
-        :type n: Integer
-        '''
-        self.d = d
-        self.n = n
-        self.build()        
-        
-    def set_next(self,n):
-        '''
-        :param l: The layer that feeds into this one
-        :type l: Layer
-        '''     
-        self.next = n
-        self.next._set_prev(self)
-        if n != self:
-            self.next._set_prev(self)    
-        
-    def _set_prev(self,l):
-        '''
-        :param l: The layer that feeds into this one
-        :type l: Layer
-        '''     
-        self.prev = l
-        self.build() 
         
     def build(self):
         '''
@@ -225,18 +204,18 @@ class ConvLayer(Layer):
         if self.prev and self.next and self.d and self.prev != self: 
           indim = self.prev.top().get_shape().as_list()
           inflat = reduce(mul,indim[1:])
+          dims = self.d.filterdim()+[indim[3], self.d.outdim()]
           self.W = tf.Variable(
-                               tf.random_uniform(self.d.filterdim()+[indim[3], self.d.outdim()],
-                                                 minval=-4.0*math.sqrt(6.0/(inflat+ self.d.outdim())),
-                                                 maxval=4.0*math.sqrt(6.0/(inflat+ self.d.outdim())),
+                               tf.truncated_normal(dims,
+                                                 stddev=0.1,
                                                  dtype=tf.float32
                                                  ),
                                name='W_'+str(self.n))
           self.bias = tf.Variable(
-                                  tf.random_uniform([self.d.outdim()],
-                                                    minval = -0.5,
-                                                    maxval = 0.5,
-                                                    dtype=tf.float32)
+                                 tf.truncated_normal([self.d.outdim()],
+                                                 stddev=0.1,
+                                                 dtype=tf.float32
+                                                 )
                                   )
           self._top = tf.tanh(tf.nn.conv2d(self.prev.top(), self.W, self.d.strides(), "SAME")+self.bias)
           if self.next != self:
@@ -252,14 +231,41 @@ class ConvLayer(Layer):
         self._recon = tf.tanh(tf.nn.deconv2d(self.next.recon(), tf.transpose(self.W, [1,0,2,3] ), self.prev.top().get_shape().as_list(), self.d.strides()))
         self.prev.build_rev()
         
-    def top(self):
-        return self._top
-    
-    def recon(self):
-        return self._recon
-      
     def params(self):
       return [self.W,self.bias]
+
+class PoolingLayer(Layer):
+  
+  def build(self):
+      '''
+      Constructs the computation graph for this layer and all subsequent layers.
+      '''
+      if self.prev and self.next and self.d and self.prev != self: 
+        indim = self.prev.top().get_shape().as_list()
+        inflat = reduce(mul,indim[1:])
+                                
+        self._top = tf.nn.max_pool(self.prev.top(),
+                                   ksize=[1,self.d.size,self.d.size,1],
+                                   strides=[1,self.d.stride,self.d.stride,1],
+                                   padding=[1,self.d.padding,self.d.padding,1],
+                                   name = "Pool {}".format(self.n))
+        if self.next != self:
+            self.next.build()
+        else:
+            self.build_loop()
+
+  def build_loop(self):
+      self._recon = tf.tanh(tf.nn.deconv2d(self.top(), tf.transpose(self.W, [1,0,2,3] ), self.prev.top().get_shape().as_list(), self.d.strides()))
+      self.prev.build_rev()
+      
+  def build_rev(self):
+      self._recon = tf.tanh(tf.nn.deconv2d(self.next.recon(), tf.transpose(self.W, [1,0,2,3] ), self.prev.top().get_shape().as_list(), self.d.strides()))
+      self.prev.build_rev()
+      
+  def params(self):
+    return []
+  
+
 
 class AutoEncoder(object):
     
@@ -268,8 +274,9 @@ class AutoEncoder(object):
         self.s = s
         self.layers = [DataLayer(self.dp)]
         self.bottom = self.layers[0].bottom()
-        self.LEARNING_RATE=0.1
+        self.LEARNING_RATE=0.7
         self.alpha = 0.0
+        self.freeze = True
         
     def add_layer(self,definition):
         l = definition.instance()
@@ -284,8 +291,11 @@ class AutoEncoder(object):
         weight_decay = reduce(add,[tf.reduce_sum(tf.pow(w,2)) for l in self.layers for w in l.params()])
         self._loss = reconstruction_loss + self.alpha*weight_decay
         # Optimization
-        self.optimizer = tf.train.MomentumOptimizer(self.LEARNING_RATE,0.9,use_locking=True) \
-                                  .minimize(self._loss, var_list=[w for l in self.layers for w in l.params()])
+        parameterlayers = self.layers
+        if self.freeze:
+          parameterlayers = [self.layers[-1]]
+        self.optimizer = tf.train.MomentumOptimizer(self.LEARNING_RATE,0.8,use_locking=True) \
+                                  .minimize(self._loss, var_list=[w for l in parameterlayers for w in l.params()])
                                                           
     
     def fwd(self,data):
@@ -446,19 +456,19 @@ class AutoEncoder(object):
 if __name__ == '__main__':
   class Object:
     pass
-  from dataio import LMDBDataProvider
+  from dataio import LMDBDataProvider, CifarDataProvider
   import numpy as np
   N_COLUMNS = 3
   N_STEPS = 1
   DATA_PARAM = Object()
-  DATA_PARAM.batch_size = 16
+  DATA_PARAM.batch_size = 128
   TRANSFORM_PARAM = Object()
   TRANSFORM_PARAM.mean_file = ""
   TRANSFORM_PARAM.mean_value = [127,127,127]
-  TRANSFORM_PARAM.crop_size = 225
+  TRANSFORM_PARAM.crop_size = 32
   TRANSFORM_PARAM.mirror = False
-  DATA_PARAM.source = sys.argv[1]
-  dp = LMDBDataProvider(DATA_PARAM,TRANSFORM_PARAM )
+  DATA_PARAM.source = sys.argv[1:]
+  dp = CifarDataProvider(DATA_PARAM,TRANSFORM_PARAM )
   with tf.Session() as s:
     ae = AutoEncoder(s,dp)
     ae.add_layer(ConvLayerDef(3,1,32))
@@ -472,7 +482,7 @@ if __name__ == '__main__':
         print(ae.encode_mb(mb[0]))
         if e%10 == 0:
           d,r = ae.recon(mb[0])
-          plt.imshow(np.append(d[0],r[0],axis=0)[:,:,0], cmap="Greys")
+          plt.imshow(dp.denormalize(np.append(d[0],r[0],axis=0)[:,:,::-1]), cmap="Greys")
           plt.colorbar()
           plt.show()
         

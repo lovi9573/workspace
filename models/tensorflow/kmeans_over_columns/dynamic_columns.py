@@ -13,29 +13,30 @@ import numpy as np
 import tensorflow as tf
 from weights_to_img import display
 from itertools import islice, cycle
+from dnf.cli.output import Output
 
 class Object:
     pass
 
-N_COLUMNS = 2
-N_STEPS = 5
-LAYERS = [{"Layerdef":ConvLayerDef(3,1,32),
-           "Pretrain_epochs":30,
+N_COLUMNS = 3
+N_STEPS = 1
+LAYERS = [{"Layerdef":ConvLayerDef(3,1,8),
+           "Pretrain_epochs":-1,
            "Convergence_threshold":0.0},
-#           {"Layerdef":ConvLayerDef(3,1,16),
-#            "Pretrain_epochs":5,
-#            "Convergence_threshold":0.0},
-#           {"Layerdef":ConvLayerDef(3,1,24),
-#            "Pretrain_epochs":3,
+          {"Layerdef":ConvLayerDef(3,1,16),
+           "Pretrain_epochs":-1,
+           "Convergence_threshold":0.0},
+          {"Layerdef":ConvLayerDef(3,1,24),
+           "Pretrain_epochs":-1,
+           "Convergence_threshold":0.0},
+#           {"Layerdef":ConvLayerDef(3,1,32),
+#            "Pretrain_epochs":30,
 #            "Convergence_threshold":0.0},
 #           {"Layerdef":ConvLayerDef(3,1,32),
-#            "Pretrain_epochs":4,
+#            "Pretrain_epochs":30,
 #            "Convergence_threshold":0.0},
-#           {"Layerdef":ConvLayerDef(3,1,32),
-#            "Pretrain_epochs":5,
-#            "Convergence_threshold":0.0},
-          {"Layerdef":ConvLayerDef(3,1,3),
-           "Pretrain_epochs":30,
+          {"Layerdef":ConvLayerDef(3,1,1),
+           "Pretrain_epochs":10,
            "Convergence_threshold":0.99}
           ]
 DATA_PARAM = Object()
@@ -47,6 +48,8 @@ TRANSFORM_PARAM.crop_size = 32
 TRANSFORM_PARAM.mirror = False
 NUM_LABELS = 10
 SHOW = False
+PATIENCE = 6
+PATIENCE_EPSILON = 0.00001
 
 def converged(a, b):
   if a == None or b == None:
@@ -74,7 +77,8 @@ def map_img_2_col(columns):
   outputs = np.zeros([DATA_PARAM.batch_size, len(columns)])
   for mb in dp.get_mb():
     for i,column in columns.iteritems():
-      outputs[:,i] = column.loss(mb[0])
+       tmp = column.individual_reconstruction_loss(mb[0])
+       outputs[:,i] = tmp
       #outputs[:,i] = np.mean(np.max(np.max(act, axis=1), axis=1), axis=1)
     maxvals = np.argmin(outputs,axis=1)
     for key,col in zip(mb[2],maxvals):
@@ -125,13 +129,15 @@ def encode_even(imap, columns, keys, epochs, epoch_num):
     n_updates = max_examples/DATA_PARAM.batch_size
     for e in range(epoch_num,epoch_num+epochs):
         print "Epoch: {}".format(e)
+        losses = dict([(col,0) for col in columns.keys()])
         for update in range(n_updates):
           for colnum,col in columns.iteritems():
             batch_keys = list(islice(cycle(imap['col2key'][colnum]),indicies[colnum],indicies[colnum]+DATA_PARAM.batch_size))
             indicies[colnum] += DATA_PARAM.batch_size
             s,l,k = dp.get_mb_by_keys(batch_keys)
             #print("\tTraining column {} on {} keys".format(colnum,len(batch_keys)))
-            columns[colnum].encode_mb(s)
+            losses[colnum] += columns[colnum].encode_mb(s)
+    return dict([(col, loss/n_updates) for col,loss in losses.iteritems()])
             
     
  
@@ -142,7 +148,20 @@ def mapping_stats(mapping):
       counts[len(counts)] = 0
     counts[val] += 1
   return counts
-            
+
+
+def pretrain_epoch(columns,dp, i):
+    print("Pretrain epoch {}".format(i))
+    losses = dict([(col,0) for col in columns.keys()])
+    n = 0
+    for mb in dp.get_mb():
+      n += 1
+      for colnum,column in columns.iteritems():
+        losses[colnum] += column.encode_mb(mb[0])
+    losses = dict([(col,v/n) for col,v in losses.iteritems()])
+    print("\tAve loss: {}".format([str(c)+":"+str(los) for c,los in losses.iteritems()]))
+    return losses
+      
 
 if __name__ == '__main__':
     if len(sys.argv) != 2:
@@ -165,13 +184,25 @@ if __name__ == '__main__':
         tf.initialize_all_variables().run()
         
         #Pretrain on all data
-        for i in range(l['Pretrain_epochs']):
-          print("Pretrain epoch {}".format(i))
-          losses = dict([(col,[]) for col in columns.keys()])
-          for mb in dp.get_mb():
-            for colnum,column in columns.iteritems():
-              losses[colnum].append(column.encode_mb(mb[0]))
-          print("\tAve loss: {}".format([str(c)+":"+str(reduce(add,los)/len(los)) for c,los in losses.iteritems()]))
+        if l['Pretrain_epochs'] > 0:
+          for i in range(l['Pretrain_epochs']):
+            pretrain_epoch(columns, dp, i)
+        #TODO: THIS PART IS NOT DONE.
+        elif l['Pretrain_epochs'] == -1:
+          losses = dict([(col,1) for col in columns.keys()])
+          best_loss = losses
+          patience = 0
+          i = 0
+          while patience < PATIENCE:
+            for col in best_loss.keys():
+              best_loss[col] = min(best_loss[col],losses[col])
+            losses = pretrain_epoch(columns, dp, i)
+            if min([ln - lo  for ln,lo in zip(losses.values(),best_loss.values())]) < -PATIENCE_EPSILON:
+              patience = 0
+              print("\tNew Best")
+            else:
+              patience += 1
+            i += 1
         print "All columns trained on all data {} epochs".format(l['Pretrain_epochs'])
         immap_old = {'key2col':None}
         immap = map_img_2_col(columns)
@@ -180,8 +211,8 @@ if __name__ == '__main__':
         epoch_num = 0
         while(not stationary(immap['key2col'], immap_old['key2col'], l['Convergence_threshold'])):
           print("Mapping Distribution " + str(immap['stats']))
-          encode_even(immap, columns, imgkeys, N_STEPS, epoch_num)
-          print "Encoding complete"
+          loss = encode_even(immap, columns, imgkeys, N_STEPS, epoch_num)
+          print("Encoding loss on mapped examples {}").format(loss)
           #for i in range(len(columns)):
             #d,r = columns[i].recon(dp.get_mb().next()[0])
             #print(d[1,100:110,100:110,0])
@@ -189,7 +220,6 @@ if __name__ == '__main__':
             #plt.imshow(np.append(d[1],r[1],axis=0)[:,:,0], cmap="Greys")
             #plt.show()
           epoch_num += N_STEPS
-          N_STEPS += 1
           immap_old = immap
           immap = map_img_2_col(columns)
       if SHOW:
@@ -214,9 +244,25 @@ if __name__ == '__main__':
       for key,col in immap['key2col'].iteritems():
         _,l,_ = dp.get_mb_by_keys([key])
         columnlabels[col][l[0]] += 1
+      output = ""
       for col,dat in columnlabels.iteritems():
-        print ("==============="+str(col)+"======================")
-        print (dat)
+        output += "==============="+str(col)+"======================\n"
+        output += str(dat) + "\n"
+        s = reduce(add,dat)
+        print dat
+        ents = [0]*len(dat)
+        for i in len(ents):
+          v = dat[i]
+          if v != 0:
+            ents[i] = -float(v)/s*math.log(float(v)/s)
+        entropy = reduce(add, ents )
+        output += "Entropy: {}\n".format(entropy)
+      print(output)
+      
+      #print column mapping
+      with open("col2key",'w') as fout:
+        fout.write(output)
+        fout.write(str(immap['col2key']))
       
         
           

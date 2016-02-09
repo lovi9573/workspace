@@ -275,7 +275,7 @@ class AutoEncoder(object):
         self.layers = [DataLayer(self.dp)]
         self.bottom = self.layers[0].bottom()
         self.LEARNING_RATE=0.7
-        self.alpha = 0.0
+        self.alpha = 0.000001
         self.freeze = True
         
     def add_layer(self,definition):
@@ -287,6 +287,8 @@ class AutoEncoder(object):
         l.build()
         self.top = self.layers[-1].top()
         self._recon = self.layers[0].recon()
+        self._individual_reconstruction_loss = tf.reduce_mean(tf.pow(self._recon - self.bottom,2),
+                                                        reduction_indices=[1,2,3] )
         reconstruction_loss = tf.reduce_mean(tf.pow(self._recon - self.bottom,2))
         weight_decay = reduce(add,[tf.reduce_sum(tf.pow(w,2)) for l in self.layers for w in l.params()])
         self._loss = reconstruction_loss + self.alpha*weight_decay
@@ -294,7 +296,7 @@ class AutoEncoder(object):
         parameterlayers = self.layers
         if self.freeze:
           parameterlayers = [self.layers[-1]]
-        self.optimizer = tf.train.MomentumOptimizer(self.LEARNING_RATE,0.8,use_locking=True) \
+        self.optimizer = tf.train.MomentumOptimizer(self.LEARNING_RATE,0.9,use_locking=True) \
                                   .minimize(self._loss, var_list=[w for l in parameterlayers for w in l.params()])
                                                           
     
@@ -310,6 +312,11 @@ class AutoEncoder(object):
         feed_dict = {self.bottom:data}
         l = self.s.run(self._loss,feed_dict=feed_dict)
         return l
+      
+    def individual_reconstruction_loss(self,data):
+        feed_dict = {self.bottom:data}
+        l = self.s.run(self._individual_reconstruction_loss,feed_dict=feed_dict)
+        return l    
         
     def encode_mb(self,data): 
           feed_dict = {self.bottom:data}

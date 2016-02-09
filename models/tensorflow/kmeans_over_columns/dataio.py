@@ -246,7 +246,7 @@ class CifarDataProvider:
     keys = []
     for f in self.files:
       for i in xrange(10000):
-            keys.append(f+"_ex{:>4}".format(i))
+            keys.append(f+"_ex{:0>4}".format(i))
     return keys
 
   def shape(self):
@@ -297,7 +297,7 @@ class CifarDataProvider:
         labels = datadict["labels"][i:i+self.batch_size]
         keys = []
         for n in range(self.batch_size):
-          keys.append(filename+"_ex{:>4}".format(i+n))
+          keys.append(filename+"_ex{:0>4}".format(i+n))
         yield (samples,labels,keys)
         i += self.batch_size
           

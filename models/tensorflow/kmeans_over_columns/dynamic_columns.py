@@ -12,18 +12,19 @@ import random as rand
 import numpy as np
 import tensorflow as tf
 from weights_to_img import display
+from itertools import islice, cycle
 
 class Object:
     pass
 
 N_COLUMNS = 2
-N_STEPS = 1
-LAYERS = [{"Layerdef":ConvLayerDef(3,1,16),
-           "Pretrain_epochs":10,
+N_STEPS = 5
+LAYERS = [{"Layerdef":ConvLayerDef(3,1,32),
+           "Pretrain_epochs":30,
            "Convergence_threshold":0.0},
-          {"Layerdef":ConvLayerDef(3,1,16),
-           "Pretrain_epochs":10,
-           "Convergence_threshold":0.0},
+#           {"Layerdef":ConvLayerDef(3,1,16),
+#            "Pretrain_epochs":5,
+#            "Convergence_threshold":0.0},
 #           {"Layerdef":ConvLayerDef(3,1,24),
 #            "Pretrain_epochs":3,
 #            "Convergence_threshold":0.0},
@@ -35,7 +36,8 @@ LAYERS = [{"Layerdef":ConvLayerDef(3,1,16),
 #            "Convergence_threshold":0.0},
           {"Layerdef":ConvLayerDef(3,1,3),
            "Pretrain_epochs":30,
-           "Convergence_threshold":0.99}]
+           "Convergence_threshold":0.99}
+          ]
 DATA_PARAM = Object()
 DATA_PARAM.batch_size = 128
 TRANSFORM_PARAM = Object()
@@ -67,7 +69,8 @@ def stationary(a,b,thresh):
 
 def map_img_2_col(columns):
   mapping = {}
-  stats = [0]*len(columns)
+  rev_mapping = dict([(col,[]) for col in columns.keys()])
+  stats = dict([(col,0) for col in columns.keys()])
   outputs = np.zeros([DATA_PARAM.batch_size, len(columns)])
   for mb in dp.get_mb():
     for i,column in columns.iteritems():
@@ -77,25 +80,60 @@ def map_img_2_col(columns):
     for key,col in zip(mb[2],maxvals):
       mapping[key] = col
       stats[col] += 1
+      rev_mapping[col].append(key)
   #print "Mapping Stats: ",stats
-  return mapping
+  return {'key2col':mapping, 'stats':stats, "col2key":rev_mapping}
 
 def encode(imap, columns, epochs, epoch_num):
     datas = [np.zeros(dp.shape()) for i in columns]
     indicies = [0 for i in columns]
+    max_examples = max(imap['stats'])
+    if min(imap['stats']) == 0:
+      max_examples = DATA_PARAM.batch_size
+    n_updates = max_examples/DATA_PARAM.batch_size
+    report = ["\tTraining column {} on {} examples\n".format(col,len(k)) for col,k in imap['col2key'].iteritems()]
+    print(''.join(report))
     for e in range(epoch_num,epoch_num+epochs):
         print "Epoch: {}".format(e)
         for mb in dp.get_mb():
             #print len(mb)
             for i in range(len(mb[2])):
                 dat,label,tag = (mb[0][i], mb[1][i], mb[2][i])
-                i = imap[tag]
-                datas[i][indicies[i],:] = dat
-                indicies[i] += 1
-                if indicies[i] == DATA_PARAM.batch_size:
-                    columns[i].encode_mb(datas[i])
-                    indicies[i] = 0
-                    #print "encode:",i
+                colnum = imap['key2col'][tag]
+                datas[colnum][indicies[colnum],:] = dat
+                indicies[colnum] += 1
+                if indicies[colnum] == DATA_PARAM.batch_size:
+                    columns[colnum].encode_mb(datas[colnum])
+                    indicies[colnum] = 0
+                for colnum,stat in imap['stats'].iteritems():
+                  if stat == 0:
+                    datas[colnum][indicies[colnum],:] = dat
+                    indicies[colnum] += 1
+                    if indicies[colnum] == DATA_PARAM.batch_size:
+                      columns[colnum].encode_mb(datas[colnum])
+                      indicies[colnum] = 0
+ 
+def encode_even(imap, columns, keys, epochs, epoch_num):
+    indicies = [0 for i in columns]
+    max_examples = max(imap['stats'].values())
+    if min(imap['stats'].values()) == 0:
+      max_examples = len(keys)
+      for colnum,n in imap['stats'].iteritems():
+        if n == 0:
+          imap['col2key'][colnum] = keys
+          print("\tColumn {} has no examples mapped to it.  Training it on all data".format(colnum))
+    n_updates = max_examples/DATA_PARAM.batch_size
+    for e in range(epoch_num,epoch_num+epochs):
+        print "Epoch: {}".format(e)
+        for update in range(n_updates):
+          for colnum,col in columns.iteritems():
+            batch_keys = list(islice(cycle(imap['col2key'][colnum]),indicies[colnum],indicies[colnum]+DATA_PARAM.batch_size))
+            indicies[colnum] += DATA_PARAM.batch_size
+            s,l,k = dp.get_mb_by_keys(batch_keys)
+            #print("\tTraining column {} on {} keys".format(colnum,len(batch_keys)))
+            columns[colnum].encode_mb(s)
+            
+    
  
 def mapping_stats(mapping):
   counts = {}
@@ -135,13 +173,14 @@ if __name__ == '__main__':
               losses[colnum].append(column.encode_mb(mb[0]))
           print("\tAve loss: {}".format([str(c)+":"+str(reduce(add,los)/len(los)) for c,los in losses.iteritems()]))
         print "All columns trained on all data {} epochs".format(l['Pretrain_epochs'])
-        immap_old = None
+        immap_old = {'key2col':None}
         immap = map_img_2_col(columns)
+        
         #Train current layer depth until convergence.
         epoch_num = 0
-        while(not stationary(immap, immap_old, l['Convergence_threshold'])):
-          print("Mapping Distribution" + str(mapping_stats(immap)))
-          encode(immap, columns, N_STEPS, epoch_num)
+        while(not stationary(immap['key2col'], immap_old['key2col'], l['Convergence_threshold'])):
+          print("Mapping Distribution " + str(immap['stats']))
+          encode_even(immap, columns, imgkeys, N_STEPS, epoch_num)
           print "Encoding complete"
           #for i in range(len(columns)):
             #d,r = columns[i].recon(dp.get_mb().next()[0])
@@ -157,11 +196,11 @@ if __name__ == '__main__':
         for i in range(len(columns)):
           print "Example for column {}".format(i)
           key = None
-          map_iter = immap.iterkeys()
+          map_iter = immap['key2col'].iterkeys()
           try:
             while(key==None):
               k = map_iter.next()
-              if immap[k] == i:
+              if immap['key2col'][k] == i:
                 key = k
             sample = dp.get_mb_by_keys([key])
             plt.imshow(dp.denormalize(sample[0][0,:]))
@@ -172,7 +211,7 @@ if __name__ == '__main__':
         
       #Get column entropy
       columnlabels = dict([(col,[0]*NUM_LABELS) for col in columns.keys()])
-      for key,col in immap.iteritems():
+      for key,col in immap['key2col'].iteritems():
         _,l,_ = dp.get_mb_by_keys([key])
         columnlabels[col][l[0]] += 1
       for col,dat in columnlabels.iteritems():

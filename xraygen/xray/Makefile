@@ -1,8 +1,8 @@
 
 FLAGS=-Wall -Wextra 
 INCLUDES=-I/usr/local/gVirtualXRay-1.0.0/library/include
-LIBPATHS=-L/usr/local/gVirtualXRay-1.0.0/library/lib
-LIBS=-lgVirtualXRay
+#LIBPATHS=-L/usr/local/gVirtualXRay-1.0.0/library/lib
+LIBS=-lGL -lglfw -lgVirtualXRay
 
 all: build
 

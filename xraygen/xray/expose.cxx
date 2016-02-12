@@ -84,6 +84,18 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <boost/filesystem.hpp>
 #endif
 
+
+
+#include "itkImage.h"
+#include "itkImageFileReader.h"
+#include "itkCastImageFilter.h"
+#include "itkRescaleIntensityImageFilter.h"
+#include "itkImageFileWriter.h"
+#include "itkImageRegionIterator.h"
+
+
+
+
 #ifndef GVXR_TYPES_H
 #include "gVirtualXRay/Types.h"
 #endif
@@ -157,6 +169,7 @@ using namespace gVirtualXRay;
 //	Defines
 //******************************************************************************
 #define PREFIX ".."
+#define OUTDIR "output/"
 
 
 //******************************************************************************
@@ -388,7 +401,7 @@ int main(int argc, char** argv)
 
         prefix += PREFIX;
 
-		prefix += "/data/";
+		prefix += "/bullet/";
 
 		loadSTLFile(prefix);
 		checkOpenGLErrorStatus(__FILE__, __FUNCTION__, __LINE__);
@@ -709,7 +722,6 @@ void render()
         if (g_display_detector)
         {
             g_xray_renderer.display();
-            g_xray_renderer.printXRayImage("out.png");
         }
 
         // Display the beam
@@ -1236,7 +1248,7 @@ void cursorPosCallback(GLFWwindow* apWindow, double x, double y)
 void loadSTLFile(const std::string& aPrefix)
 //------------------------------------------
 {
-	std::string stl_filename("welsh-dragon-small.stl");
+	std::string stl_filename("friesinbasket.stl");
 
 	// Open the file
 	FILE* p_file_descriptor(fopen(stl_filename.data(), "rb"));
@@ -1312,6 +1324,62 @@ void loadXRaySimulator()
 
 
 //--------------------
+void writeImage(XRayRenderer::PixelType* im, const char* fname)
+//--------------------
+{
+	typedef itk::Image<XRayRenderer::PixelType, 2> InputImageType;
+
+	typedef  unsigned char OutputPixelType;
+	typedef itk::Image<OutputPixelType, 2> OutputImageType;
+
+	//Get buffer into itk Image
+	InputImageType::Pointer image = InputImageType::New();
+	InputImageType::IndexType start;
+	start[0] = 0;
+	start[1] = 0;
+	InputImageType::SizeType size;
+	size[0] = g_xray_detector.getNumberOfPixels().getX();
+	size[1] = g_xray_detector.getNumberOfPixels().getY();
+	InputImageType::RegionType region;
+	region.SetSize( size );
+	region.SetIndex( start );
+	image->SetRegions(region);
+	image->Allocate();
+	itk::ImageRegionIterator<InputImageType> it(image, region);
+	it.GoToBegin();
+	while( !it.IsAtEnd()){
+		it.Set( *im);
+		++it;
+		++im;
+	}
+
+
+	typedef itk::RescaleIntensityImageFilter< InputImageType, InputImageType> RescaleType;
+	RescaleType::Pointer rescale = RescaleType::New();
+	rescale->SetInput(image);
+	rescale->SetOutputMinimum(0);
+	rescale->SetOutputMaximum(itk::NumericTraits<OutputPixelType>::max());
+
+	typedef itk::CastImageFilter<  InputImageType, OutputImageType > FilterType;
+	FilterType::Pointer filter = FilterType::New();
+	filter->SetInput( rescale->GetOutput() );
+
+	typedef itk::ImageFileWriter< OutputImageType > WriterType;
+	WriterType::Pointer writer = WriterType::New();
+	writer->SetFileName( fname );
+	writer->SetInput( filter->GetOutput() );
+
+	try
+	{
+		writer->Update();
+	}
+	catch( itk::ExceptionObject & e )
+	{
+		std::cerr << "Error: " << e << std::endl;
+	}
+}
+
+//--------------------
 void updateXRayImage()
 //--------------------
 {
@@ -1321,8 +1389,15 @@ void updateXRayImage()
 		// Compute the X-Ray image
 		g_xray_renderer.computeImage(g_sample_rotation_matrix);
 
+		std::string ext = ".png";
 		// Normalise the X-ray image
 		g_xray_renderer.normalise();
+
+		writeImage( g_xray_renderer.getXRayImage(), (OUTDIR"printXRayImage"+ext).c_str());
+//		g_xray_renderer.printLBuffer(OUTDIR"printLBuffer"+ext);
+//		g_xray_renderer.printSumMuxDx(OUTDIR"printSumMuxDx"+ext);
+//		g_xray_renderer.printEnergyFluence(OUTDIR"printEnergyFluence"+ext);
+//		g_xray_renderer.printXRayImage (OUTDIR"printXRayImage"+ext);
 
 		// The X-ray image is up-to-date
 		g_is_xray_image_up_to_date = true;

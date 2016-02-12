@@ -388,7 +388,7 @@ int main(int argc, char** argv)
 
         prefix += PREFIX;
 
-		prefix += "/data/";
+		prefix += "/bullet/";
 
 		loadSTLFile(prefix);
 		checkOpenGLErrorStatus(__FILE__, __FUNCTION__, __LINE__);
@@ -1235,7 +1235,7 @@ void cursorPosCallback(GLFWwindow* apWindow, double x, double y)
 void loadSTLFile(const std::string& aPrefix)
 //------------------------------------------
 {
-	std::string stl_filename("welsh-dragon-small.stl");
+	std::string stl_filename("friesinbasket.stl");
 
 	// Open the file
 	FILE* p_file_descriptor(fopen(stl_filename.data(), "rb"));
@@ -1320,8 +1320,15 @@ void updateXRayImage()
 		// Compute the X-Ray image
 		g_xray_renderer.computeImage(g_sample_rotation_matrix);
 
+		std::string ext = ".tiff";
 		// Normalise the X-ray image
 		g_xray_renderer.normalise();
+
+
+		g_xray_renderer.printLBuffer("printLBuffer"+ext);
+		g_xray_renderer.printSumMuxDx("printSumMuxDx"+ext);
+		g_xray_renderer.printEnergyFluence("printEnergyFluence"+ext);
+		g_xray_renderer.printXRayImage ("printXRayImage"+ext);
 
 		// The X-ray image is up-to-date
 		g_is_xray_image_up_to_date = true;

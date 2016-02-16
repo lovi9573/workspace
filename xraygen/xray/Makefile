@@ -2,7 +2,7 @@
 FLAGS=-Wall -Wextra 
 INCLUDES=-I/usr/local/gVirtualXRay-1.0.0/library/include  -I/home/jlovitt/Downloads/gVirtualXRay-1.0.0-Source/build/ITKIOFactoryRegistration -I/usr/local/include/ITK-4.8 -I/home/jlovitt/Downloads/gVirtualXRay-1.0.0-Source/build -I/home/jlovitt/Downloads/gVirtualXRay-1.0.0-Source/cmake/../include -I/home/jlovitt/Downloads/gVirtualXRay-1.0.0-Source/cmake/../include/OpenGL4 -I/usr/include/freetype2 -I/home/jlovitt/Downloads/gVirtualXRay-1.0.0-Source/build/examples_bin/STL-File -I/usr/local/include
 LIBPATHS=-L/usr/local/gVirtualXRay-1.0.0/library/lib
-LIBS= -lglfw3 -lGL
+LIBS= -lglfw3 -lGL -lboost_system -lboost_filesystem
 STATICLIBS=/usr/local/gVirtualXRay-1.0.0/library/lib/libgVirtualXRay.a
 
 
@@ -13,6 +13,6 @@ BLAHFLAGS=-DGLEW_STATIC -DHAS_GLEW -DHAS_ITK -DITK_IO_FACTORY_REGISTER_MANAGER -
 all: build
 
 build:
-	c++ -rdynamic $(FLAGS) $(BLAHFLAGS) $(INCLUDES)   expose.cxx  -o expose $(STATICLIBS) $(BLAH)
+	c++ -rdynamic $(FLAGS) $(BLAHFLAGS) $(INCLUDES)   expose.cxx  -o expose $(STATICLIBS) $(BLAH) $(LIBS)
 
 	

@@ -215,7 +215,7 @@ Matrix4x4<GLfloat> g_sample_rotation_matrix;
 Matrix4x4<GLfloat> g_text_2D_projection_matrix;
 
 GLfloat g_incident_energy(80.0 * keV);
-VEC2 g_detector_size(320.0 * mm, 320.0 * mm);
+VEC2 g_detector_size(120.0 * mm, 120.0 * mm);
 Vec2ui g_number_of_pixels(2048, 2048);
 GLfloat g_resolution(g_detector_size.getX() / g_number_of_pixels.getX());
 
@@ -347,50 +347,6 @@ int main(int argc, char** argv)
 	    // Make the window's context current
 	    glfwMakeContextCurrent(g_p_main_window_id);
 
-//        // Initialise GLEW
-//        initGLEW();
-//
-// 		// Is stereo enable
-//		if (g_stereo_helper.enable())
-//		{
-//			std::cout << "Stereo is enable." << std::endl;
-//		}
-//		else
-//		{
-//			std::cout << "Stereo is not enable." << std::endl;
-//		}
-//		checkOpenGLErrorStatus(__FILE__, __FUNCTION__, __LINE__);
-//
-//        // Check the OpenGL version
-//        std::cout << "GL:\t" << glGetString(GL_VERSION) << std::endl;
-//
-//        // Check the GLSL version
-//        std::cout << "GLSL:\t" << glGetString(GL_SHADING_LANGUAGE_VERSION) << std::endl;
-
-     	// Initialise OpenGL
-//		initGL();
-//		checkOpenGLErrorStatus(__FILE__, __FUNCTION__, __LINE__);
-
-        // Initialise FreeType
-//        initFreeType();
-
-		// Check the current FBO
-//		checkFBOErrorStatus(__FILE__, __FUNCTION__, __LINE__);
-
-		// Set the stereo parameters
-//		g_stereo_helper.setIntraocularDistance(g_initial_intraocular_distance);
-//		g_stereo_helper.setFieldOfViewY(g_initial_fovy);
-//		g_stereo_helper.setNear(g_initial_near);
-//		g_stereo_helper.setFar(g_initial_far);
-//		g_stereo_helper.setScreenProjectionPlane(g_initial_screen_projection_plane);
-
-		// Initialize GLFW callback
-//		glfwSetKeyCallback(g_p_main_window_id, keyCallback);
-//		glfwSetFramebufferSizeCallback(g_p_main_window_id, framebufferSizeCallback);
-//		glfwSetMouseButtonCallback(g_p_main_window_id, mouseButtonCallback);
-//		glfwSetCursorPosCallback(g_p_main_window_id, cursorPosCallback);
-//		glfwSetScrollCallback(g_p_main_window_id, scrollCallback);
-
 		// Load the data
 		loadDetector();
 		checkOpenGLErrorStatus(__FILE__, __FUNCTION__, __LINE__);
@@ -493,7 +449,7 @@ void loadSTLFile(const std::string& fname)
 	g_polygon_data.setFilename(stl_filename.data());
 	g_polygon_data.loadSTLFile(true, true, true, true, mm, GL_STATIC_DRAW);
 	g_polygon_data.mergeVertices(true);
-	g_polygon_data.setHounsfieldValue(500.0);
+	g_polygon_data.setHounsfieldValue(0.0);
 
 	// The X-ray image is not up-to-date
 	g_is_xray_image_up_to_date = false;

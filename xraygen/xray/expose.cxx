@@ -376,10 +376,11 @@ int main(int argc, char** argv)
         	g_xray_renderer.addInnerSurface(&g_polygon_data);
 
 			// Rotate the sample
-			g_sample_rotation_matrix.rotate( 90, VEC3(1, 0, 0));
+//			g_sample_rotation_matrix.rotate( 90, VEC3(1, 0, 0));
+//			g_sample_rotation_matrix.rotate( 90, VEC3(0, 1, 0));
 
 			// Rotate the scene
-			g_scene_rotation_matrix.rotate(-170, VEC3(0, 1, 0));
+//			g_scene_rotation_matrix.rotate(-170, VEC3(0, 1, 0));
 
 			// Update the X-ray image
 			fs::path out = output_prefix;

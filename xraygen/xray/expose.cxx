@@ -184,7 +184,7 @@ const int DETECTOR(3);
 
 const double g_initial_intraocular_distance(1.5 * cm);        // Intraocular distance
 const double g_initial_fovy(45);                              // Field of view along the y-axis
-const double g_initial_near(5.0 * cm);                        // Near clipping plane
+const double g_initial_near(-10.0 * cm);                        // Near clipping plane (default: 5.0)
 const double g_initial_far(500.0 * cm);                       // Far clipping plane
 const double g_initial_screen_projection_plane(10000.0 * cm); // Screen projection plane
 
@@ -214,13 +214,13 @@ Matrix4x4<GLfloat> g_detector_rotation_matrix;
 Matrix4x4<GLfloat> g_sample_rotation_matrix;
 Matrix4x4<GLfloat> g_text_2D_projection_matrix;
 
-GLfloat g_incident_energy(80.0 * keV);
+GLfloat g_incident_energy(20.0 * keV);  //(default: 80.0 keV)
 VEC2 g_detector_size(120.0 * mm, 120.0 * mm);
 Vec2ui g_number_of_pixels(2048, 2048);
 GLfloat g_resolution(g_detector_size.getX() / g_number_of_pixels.getX());
 
 VEC3 g_source_position(   0.0, 0.0, -40.0 * cm);
-VEC3 g_detector_position( 0.0, 0.0,  10.0 * cm);
+VEC3 g_detector_position( 0.0, 0.0,  20.0 * cm);  //(default:10.0)
 VEC3 g_detector_up_vector(0.0, 1.0,   0.0);
 const VEC3 g_background_colour(0.5, 0.5, 0.5);
 
@@ -480,8 +480,9 @@ void loadSource()
 
 	// Set the source position
 	g_xray_detector.setXrayPointSource(g_source_position);
-	//g_xray_detector.setParallelBeam();
-	g_xray_detector.setPointSource();
+	g_xray_detector.setParallelBeam();
+	//g_xray_detector.setPointSource();
+	//g_xray_detector.setSquareSource(g_source_position, 2, 0.1 *cm);
 
 	// The X-ray image is not up-to-date
 	g_is_xray_image_up_to_date = false;

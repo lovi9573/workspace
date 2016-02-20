@@ -30,11 +30,11 @@ def get_max_keyframe(obj_list):
     return max_keyframe
 
 
-def save():
+def save(pre):
     #bpy.ops.object.select_all(action='SELECT')
     select_fries()
     bpy.ops.export_mesh.stl(\
-        filepath="/home/jlovitt/git/workspace/xraygen/xray/stl/generated{:0>5}.stl".format(gf.gen_num()),\
+        filepath="/home/jlovitt/git/workspace/xraygen/xray/stl/{}{:0>5}.stl".format(pre,gf.gen_num()),\
         check_existing=False, \
         axis_forward='-Z', \
         axis_up='-Y', \

@@ -2,7 +2,9 @@ import bpy
 import bmesh
 import random
 import math
+import time
 import mathutils as mu
+from bpy_extras import object_utils
 
 
 def gen_num():
@@ -41,6 +43,23 @@ def add_box(width, height, depth):
 
 from bpy.props import FloatProperty, BoolProperty, FloatVectorProperty
 
+class Timer():
+        
+    def __init__(self):
+        self.base = time.time()
+        self.times = {}
+       
+    def time(self,id):
+        t = time.time()
+        if id not in self.times:
+            self.times[id] = 0
+        self.times[id] += t-self.base
+        base = t
+         
+    def report(self):
+        for k in self.times.keys():
+            v = self.times[k]
+            print("{}: {}".format(k,int(v*1000)))
 
 class AddBox():
     """Add a simple box mesh"""
@@ -83,10 +102,12 @@ class AddBox():
             subtype='EULER',
             )
 
-    def execute(self, context,n):
+    def execute(self, context,n, lmin, lmax):
         bpy.context.scene.cursor_location = mu.Vector([0,0,0])
+        t = Timer()
+        objs = []
         for i in range(n):
-            self.depth = random.uniform(1.0,5.0)
+            self.depth = random.uniform(lmin,lmax)
             verts_loc, faces = add_box(0.25,
                                        0.25,
                                        self.depth,
@@ -95,11 +116,12 @@ class AddBox():
             mesh = bpy.data.meshes.new(name)
             internal_name = mesh.name
             
+            
             bm = bmesh.new()
             
-    
             for v_co in verts_loc:
                 bm.verts.new(v_co)
+
             bm.verts.ensure_lookup_table()
     
             for f_idx in faces:
@@ -107,33 +129,43 @@ class AddBox():
     
             bm.to_mesh(mesh)
             mesh.update()
-    
             # add the mesh as an object into the scene with this utility module
-            from bpy_extras import object_utils
-            new_object = object_utils.object_data_add(context, mesh)
-            rot = bpy.context.scene.objects.active.rotation_euler
-            rot[:] = random.uniform(0,2*math.pi),random.uniform(0,2*math.pi),random.uniform(0,2*math.pi)
-            loc = bpy.context.scene.objects.active.location
-            loc[:] = random.uniform(-self.LOCATION_RANGE,self.LOCATION_RANGE), \
+            ob = bpy.data.objects.new(internal_name,mesh)
+            objs.append(ob)
+            bpy.context.scene.objects.link(ob)
+        t.time('object_create')
+        for obj in objs:
+            obj.rotation_euler[:] = random.uniform(0,2*math.pi),\
+                                 random.uniform(0,2*math.pi),\
+                                 random.uniform(0,2*math.pi)
+            obj.location[:] = \
+                  random.uniform(-self.LOCATION_RANGE,self.LOCATION_RANGE), \
                   random.uniform(-self.LOCATION_RANGE,self.LOCATION_RANGE), \
                   random.uniform(-self.LOCATION_RANGE,self.LOCATION_RANGE)
-            
-            bpy.ops.object.group_link(group="Fries-Auto")
-            bpy.ops.object.modifier_add(type='COLLISION')
-            bpy.ops.rigidbody.object_add()
-            bpy.data.objects[internal_name].rigid_body.use_deactivation = True
-            #bpy.context.object.game.physics_type = 'RIGID_BODY'
-            #bpy.context.object.game.use_collision_bounds = True
-            #bpy.context.object.game.collision_bounds_type = 'BOX'
-            
+        t.time('transform')
+        fry_group = bpy.data.groups['Fries-Auto']
+        for obj in objs:               
+            fry_group.objects.link(obj)
+            obj.modifiers.new('col','COLLISION')
+            bpy.context.scene.rigidbody_world.group.objects.link(obj)
+            ##bpy.ops.object.group_link(group="Fries-Auto")
+            #bpy.context.scene.objects.active = obj
+            ##bpy.ops.object.modifier_add(type='COLLISION')
+            #bpy.ops.rigidbody.object_add()
+            #obj.rigid_body.use_deactivation = True
+            ##bpy.context.object.game.physics_type = 'RIGID_BODY'
+            ##bpy.context.object.game.use_collision_bounds = True
+            ##bpy.context.object.game.collision_bounds_type = 'BOX'
+        t.time('group/collision')
+        t.report()
         return {'FINISHED'}
 
 
-def generate(n):
+def generate(n,lmin, lmax):
     bpy.ops.object.select_all(action='DESELECT')
     bpy.ops.screen.frame_jump(end=False)
     op = AddBox()
-    op.execute(bpy.context,n)
+    op.execute(bpy.context,n, lmin, lmax)
     print("Fries Generated {}".format(bpy.context.scene.gen_number))
     bpy.context.scene.gen_number += 1
     

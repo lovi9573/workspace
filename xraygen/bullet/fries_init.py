@@ -10,8 +10,13 @@ imp.reload(gf)
 imp.reload(sp)
 
 N_IMAGES = 5
-N_STEPS = 250
-N_FRIES = 1024
+N_STEPS = 225
+N_FRIES = 512
+PHYSICS_FREQ = 100
+PHYSICS_SOLVER_ITER = 10
+FILE_PREFIX = 'generated_short'
+LENGTH_MIN = 0.9
+LENGTH_MAX = 1.0
 
 if __name__ == "__main__":
     bpy.ops.object.select_all(action='DESELECT')
@@ -26,14 +31,17 @@ if __name__ == "__main__":
 
     sp.remove_fries()
     bpy.ops.object.select_all(action='DESELECT')
+    bpy.data.scenes['Scene'].rigidbody_world.steps_per_second = PHYSICS_FREQ
+    bpy.data.scenes['Scene'].rigidbody_world.solver_iterations = PHYSICS_SOLVER_ITER
     print("Fry Init complete")
 
     for gen in range(N_IMAGES):
         bpy.context.scene.frame_set(0)
-        gf.generate(N_FRIES)
+        gf.generate(N_FRIES, LENGTH_MIN, LENGTH_MAX)
         for i in range(N_STEPS):
             bpy.context.scene.frame_set(bpy.context.scene.frame_current + 1)
-            print(i)
-        sp.save()
+            if i %100 ==0:
+                print("\tTime Step {}".format(i))
+        sp.save(FILE_PREFIX)
         sp.remove_fries()
 

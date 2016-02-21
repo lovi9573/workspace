@@ -215,7 +215,7 @@ Matrix4x4<GLfloat> g_sample_rotation_matrix;
 Matrix4x4<GLfloat> g_text_2D_projection_matrix;
 
 GLfloat g_incident_energy(20.0 * keV);  //(default: 80.0 keV)
-VEC2 g_detector_size(120.0 * mm, 120.0 * mm);
+VEC2 g_detector_size(30.0 * cm, 30.0 * cm);
 Vec2ui g_number_of_pixels(2048, 2048);
 GLfloat g_resolution(g_detector_size.getX() / g_number_of_pixels.getX());
 
@@ -451,6 +451,7 @@ void loadSTLFile(const std::string& fname)
 	g_polygon_data.loadSTLFile(true, true, true, true, mm, GL_STATIC_DRAW);
 	g_polygon_data.mergeVertices(true);
 	g_polygon_data.setHounsfieldValue(0.0);
+	g_polygon_data.applyScale(3.0);
 
 	// The X-ray image is not up-to-date
 	g_is_xray_image_up_to_date = false;
@@ -480,8 +481,8 @@ void loadSource()
 
 	// Set the source position
 	g_xray_detector.setXrayPointSource(g_source_position);
-	g_xray_detector.setParallelBeam();
-	//g_xray_detector.setPointSource();
+	//g_xray_detector.setParallelBeam();
+	g_xray_detector.setPointSource();
 	//g_xray_detector.setSquareSource(g_source_position, 2, 0.1 *cm);
 
 	// The X-ray image is not up-to-date

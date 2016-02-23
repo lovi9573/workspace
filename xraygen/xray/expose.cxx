@@ -197,7 +197,6 @@ GLsizei g_current_main_window_height(600);
 GLsizei g_original_main_window_width(g_current_main_window_width);
 GLsizei g_original_main_window_height(g_current_main_window_height);
 GLFWwindow* g_p_main_window_id(0);
-GLfloat g_zoom(120.0 * cm);
 
 int g_button(-1);
 int g_button_state(-1);
@@ -575,7 +574,7 @@ void updateXRayImage(const std::string& fname)
 
 //		std::string ext = ".png";
 		// Normalise the X-ray image
-		g_xray_renderer.normalise();
+		//g_xray_renderer.normalise();
 
 		writeImage( g_xray_renderer.getXRayImage(), fname.c_str());
 //		g_xray_renderer.printLBuffer(OUTDIR"printLBuffer"+ext);

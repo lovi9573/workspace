@@ -4,7 +4,7 @@ Created on Jan 13, 2016
 @author: jlovitt
 '''
 import sys
-from dataio import LMDBDataProvider, CifarDataProvider
+from dataio import LMDBDataProvider, CifarDataProvider, MnistDataProvider
 from matplotlib import pyplot as plt
 from matplotlib import image as mpimg
 from sigmoid_autoencoder import *
@@ -21,6 +21,8 @@ class Object:
 
 N_COLUMNS = 1
 N_STEPS = 1
+"""
+Cifar Setup
 LAYERS = [
           {"Layerdef":CorruptionLayerDef(0.9),
            "Train":False},
@@ -43,17 +45,82 @@ LAYERS = [
 #            "Pretrain_epochs":10,
 #            "Convergence_threshold":0.99}
           ]
+"""
+LAYERS = [
+          {"Layerdef":CorruptionLayerDef(0.001),
+           "Train":False},
+           {"Layerdef":ConvLayerDef(1,1,1),
+            "Pretrain_epochs":-1,
+            "Patience": 5,
+            "Patience_delta": 0.0001,
+            "Convergence_threshold":0.0},
+          {'Layerdef':FeedThroughLayerDef(),
+           "Train":False},
+          {"Layerdef":ConvLayerDef(1,1,1),
+            "Pretrain_epochs":-1,
+            "Patience": 5,
+            "Patience_delta": 0.0001,
+            "Convergence_threshold":0.0},
+          {"Layerdef":ConvLayerDef(1,1,1),
+            "Pretrain_epochs":-1,
+            "Patience": 5,
+            "Patience_delta": 0.0001,
+            "Convergence_threshold":0.0},
+          {'Layerdef':FCLayerDef(128,lr=0.7),
+           "Pretrain_epochs":-1,
+           "Patience": 2,
+           "Patience_delta": 0.01,
+           "Convergence_threshold":0.0},
+          {'Layerdef':FCLayerDef(8,lr=0.9),
+           "Pretrain_epochs":-1,
+           "Patience": 10,
+           "Patience_delta": 0.00001,
+           "Convergence_threshold":0.0},
+          {'Layerdef':FCLayerDef(10),
+           "Pretrain_epochs":-1,
+           "Convergence_threshold":0.0},
+         ]
+
+"""
+Mnist setup
+LAYERS = [
+          {"Layerdef":CorruptionLayerDef(0.0),
+           "Train":False},
+#           {'Layerdef':FCLayerDef(1024),
+#            "Pretrain_epochs":-1,
+#            "Convergence_threshold":0.0},
+          {"Layerdef":ConvLayerDef(7,3,64),
+           "Pretrain_epochs":-1,
+           "Convergence_threshold":0.0,
+           "Sparsity_lr": 0.0,
+           "Sparsity_target":0.05},
+          {"Layerdef":ConvLayerDef(4,2,128),
+           "Pretrain_epochs":-1,
+           "Convergence_threshold":0.0},
+          {"Layerdef":ConvLayerDef(2,1,196),
+           "Pretrain_epochs":-1,
+           "Convergence_threshold":0.0},
+          {"Layerdef":ConvLayerDef(3,1,32),
+           "Pretrain_epochs":-1,
+           "Convergence_threshold":0.0},
+#           {"Layerdef":ConvLayerDef(3,1,32),
+#             "Pretrain_epochs":-1,
+#             "Convergence_threshold":0.0},
+#           {"Layerdef":ConvLayerDef(3,1,1),
+#            "Pretrain_epochs":10,
+#            "Convergence_threshold":0.99}
+          ]
+"""
+
 DATA_PARAM = Object()
 DATA_PARAM.batch_size = 128
 TRANSFORM_PARAM = Object()
 TRANSFORM_PARAM.mean_file = ""
 TRANSFORM_PARAM.mean_value = [127,127,127]
-TRANSFORM_PARAM.crop_size = 32
+TRANSFORM_PARAM.crop_size = 28
 TRANSFORM_PARAM.mirror = False
 NUM_LABELS = 10
 SHOW = False
-PATIENCE = 10
-PATIENCE_EPSILON = 0.00001
 LOG_DIR = 'log2/'
 
 def converged(a, b):
@@ -168,11 +235,11 @@ def pretrain_epoch(columns,dp, i):
       
 
 if __name__ == '__main__':
-    if len(sys.argv) != 2:
-      print "Usage: python dynamic_columns.py <path to lmdb data>"
+    if len(sys.argv) < 2:
+      print "Usage: python dynamic_columns.py <path to data> [<>]"
       sys.exit(-1)
     DATA_PARAM.source = sys.argv[1:]
-    dp = CifarDataProvider(DATA_PARAM,TRANSFORM_PARAM )
+    dp = MnistDataProvider(DATA_PARAM,TRANSFORM_PARAM )
     imgkeys = dp.get_keys()
     columns = {}
     with tf.Session() as s:
@@ -189,43 +256,46 @@ if __name__ == '__main__':
         
         if l.get('Train',True):
           #Pretrain on all data
-          if l['Pretrain_epochs'] > 0:
+          if l.get('Pretrain_epochs',0) > 0:
             for i in range(l['Pretrain_epochs']):
               losses = pretrain_epoch(columns, dp, i)
               print("\tAve loss: {}".format([str(c)+":"+str(los) for c,los in losses.iteritems()]))
-          elif l['Pretrain_epochs'] == -1:
+          elif l.get('Pretrain_epochs',0) == -1:
             losses = dict([(col,10) for col in columns.keys()])
             best_loss = losses
             patience = 0
             i = 0
-            while patience < PATIENCE:
+            while patience < l.get("Patience",0):
               for col in best_loss.keys():
                 best_loss[col] = min(best_loss[col],losses[col])
               losses = pretrain_epoch(columns, dp, i)
-              if min([ln - lo  for ln,lo in zip(losses.values(),best_loss.values())]) < -PATIENCE_EPSILON:
+              if min([(ln - lo)/lo  for ln,lo in zip(losses.values(),best_loss.values())]) < -l.get("Patience_delta",0.1):
                 patience = 0
                 print("\tAve loss: {} ***".format([str(c)+":"+str(los) for c,los in losses.iteritems()]))
               else:
                 print("\tAve loss: {}".format([str(c)+":"+str(los) for c,los in losses.iteritems()]))
                 patience += 1
               i += 1
-          print "All columns trained on all data {} epochs".format(l['Pretrain_epochs'])
+          print "All columns trained on all data {} epochs".format(l.get('Pretrain_epochs',0))
           
           #Visual investigation
           for n,column in columns.iteritems():
             print "\tColumn {}".format(n)
             d,r = column.recon(dp.get_mb().next()[0])
-            im = Image.fromarray(np.append(dp.denormalize(d[4]),dp.denormalize(r[4]),axis=0).astype(np.uint8))
+            im = Image.fromarray(np.append(dp.denormalize(d[4]),dp.denormalize(r[4]),axis=0).astype(np.uint8).squeeze(),mode='L')
             im.save(LOG_DIR+'im_recon_col'+str(n)+'_level'+str(layer_number)+'.png')
             shape = column.top_shape()
             print shape
             a = np.zeros(shape)
-            for channel in range(shape[3]):
+            for channel in range(shape[-1]):
               b = a.copy()
-              b[0,shape[1]/2,shape[2]/2,channel] = 1
+              if len(shape) == 4:
+                b[0,shape[1]/2,shape[2]/2,channel] = 1
+              elif len(shape) == 2:
+                b[0,channel] = 1
               c = column.inject(b)
               print c.shape
-              im = Image.fromarray(dp.denormalize(c[0,:]).astype(np.uint8))
+              im = Image.fromarray(dp.denormalize(c[0,:]).astype(np.uint8).squeeze(),mode='L')
               im.save(LOG_DIR+'col'+str(n)+'_level'+str(layer_number)+'_channel'+str(channel)+'.png')
           
           immap_old = {'key2col':None}

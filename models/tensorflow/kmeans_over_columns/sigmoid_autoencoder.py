@@ -8,7 +8,7 @@ from __future__ import print_function
 import gzip
 import os
 import sys
-
+from os import path
 import tensorflow.python.platform
 from google.protobuf.text_format import Merge
 import numpy
@@ -20,11 +20,20 @@ import matplotlib.pyplot as plt
 from operator import mul,add
 
 
-
-
-class FCLayerDef(object):
+class LayerDef():
+  
+  def __init__(self,params):
+    self.lr = params.get('lr',0.1)
+    self.alpha = params.get('alpha',0.0)
+    self.sparsity_target = params.get('sparsity_target',0.01)
+    self.sparsity_lr = params.get('sparsity_lr',0.0)
     
-    def __init__(self, outdim):
+
+
+class FCLayerDef(LayerDef):
+    
+    def __init__(self, outdim, **params):
+      LayerDef.__init__(self,params)
       self._outdim = outdim
       self._indim = None
         
@@ -40,9 +49,10 @@ class FCLayerDef(object):
     def __str__(self):
       return "Fully Connected layer with output size {}".format(self._outdim)
   
-class ConvLayerDef(object):
+class ConvLayerDef(LayerDef):
 
-    def __init__(self,filterdim, stride, outdim):
+    def __init__(self,filterdim, stride, outdim, **params):
+      LayerDef.__init__(self,params)
       self._outdim = outdim
       self._filterdim = filterdim
       self._stride = stride
@@ -66,8 +76,9 @@ class ConvLayerDef(object):
     def __str__(self):
       return "Convolutional layer {}x{}x{} stride {}".format(self._filterdim, self._filterdim,self._outdim,self._stride)
   
-class CorruptionLayerDef(object):
-    def __init__(self,corruptionlevel):
+class CorruptionLayerDef(LayerDef):
+    def __init__(self,corruptionlevel, **params):
+      LayerDef.__init__(self,params)
       self._corruptionlevel = corruptionlevel
   
     def corruptionlevel(self):
@@ -79,6 +90,15 @@ class CorruptionLayerDef(object):
     def __str__(self):
       return "Corruption layer at p({})".format(self._corruptionlevel)
     
+class FeedThroughLayerDef(LayerDef):
+    def __init__(self, **params):
+      LayerDef.__init__(self,params)
+      
+    def instance(self):
+        return FeedThroughLayer()
+  
+    def __str__(self):
+      return "Feed Through layer"
   
 """
 ==========================================================================================================
@@ -110,6 +130,9 @@ class DataLayer(Layer):
         
     def top(self):
         return self.datalayer
+    
+    def truth(self):
+        return self.top()
     
     def build_rev(self):
         self._recon = self.next.recon()
@@ -169,15 +192,45 @@ class FeedThroughLayer(Layer):
       '''     
       self.prev = l
       self.build()   
+      
+  def build(self):
+      if self.prev and self.next and self.prev != self: 
+        self._top = self.prev.top()
+        if self.next != self:
+          self.next.build()
+        else:
+          self.build_loop()
+
+  def build_loop(self):
+      self._recon = self.top()
+      self.prev.build_rev()
+      
+  def build_rev(self):
+      self._recon = self.next.recon()
+      self.prev.build_rev()
+  
+  def inject(self,i):
+      self._back = i
+      self.prev.build_back()
+      
+  def build_back(self):
+      self._back = self.next.back()
+      self.prev.build_back()
    
   def top(self):
       return self._top
+    
+  def truth(self):
+      return self.top()
   
   def recon(self):
       return self._recon  
   
   def back(self):
     return self._back
+  
+  def params(self):
+    return []     
       
 
 class CorruptionLayer(FeedThroughLayer):
@@ -198,34 +251,15 @@ class CorruptionLayer(FeedThroughLayer):
                                              minval = 0,
                                              maxval = 1,
                                              dtype=tf.float32)
-          self.mask = tf.to_float(self.p > self.d.corruptionlevel())
-          self.invmask = tf.to_float(self.p <= self.d.corruptionlevel())
+          self.mask = tf.to_float(self.p < self.d.corruptionlevel())
+          self.invmask = tf.to_float(self.p >= self.d.corruptionlevel())
           self._top = tf.mul(self.prev.top(),self.invmask) + tf.mul(self.noise, self.mask)
           if self.next != self:
             self.next.build()
           else:
             self.build_loop()
 
-  def build_loop(self):
-      self._recon = self.top()
-      self.prev.build_rev()
-      
-  def build_rev(self):
-      self._recon = self.next.recon()
-      self.prev.build_rev()
-  
-  def inject(self,i):
-      self._back = i
-      self.prev.build_back()
-      
-  def build_back(self):
-      self._back = self.next.back()
-      self.prev.build_back()
-  
-  def params(self):
-    return []            
-  
-
+    
 
 class FCLayer(FeedThroughLayer): 
         
@@ -242,32 +276,32 @@ class FCLayer(FeedThroughLayer):
                                                  maxval=4.0*math.sqrt(6.0/(inflat+ self.d.outdim())),
                                                  dtype=tf.float32
                                                  ),
-                               name='W_'+str(self.n))
+                               name='Weights_'+str(self.n))
           self.bias = tf.Variable(
                                   tf.zeros([self.d.outdim()]),
-                                  name='b_'+str(self.n))
+                                  name='bias_'+str(self.n))
           #print(self.W.get_shape().with_rank(2))
           flat_in = tf.reshape(self.prev.top(),[self._indim[0],-1])
-          self._top = tf.tanh(tf.matmul(flat_in,self.W))
+          self._top = tf.sigmoid(tf.matmul(flat_in,self.W))
           if self.next != self:
               self.next.build()
           else:
               self.build_loop()
                 
     def build_loop(self):
-        self._recon = tf.reshape(tf.tanh(tf.matmul(self.top(),tf.transpose(self.W))),self._indim)
+        self._recon = tf.reshape(tf.sigmoid(tf.matmul(self.top(),tf.transpose(self.W))),self._indim)
         self.prev.build_rev()
         
     def build_rev(self):
-        self._recon = tf.reshape(tf.tanh(tf.matmul(self.next.recon(),tf.transpose(self.W))),self._indim)
+        self._recon = tf.reshape(tf.sigmoid(tf.matmul(self.next.recon(),tf.transpose(self.W))),self._indim)
         self.prev.build_rev()
  
     def inject(self,i):
-        self._back = tf.reshape(tf.tanh(tf.matmul(i,tf.transpose(self.W))),self._indim)
+        self._back = tf.reshape(tf.sigmoid(tf.matmul(i,tf.transpose(self.W))),self._indim)
         self.prev.build_back()
         
     def build_back(self):
-        self._back = tf.reshape(tf.tanh(tf.matmul(self.next.back(),tf.transpose(self.W))),self._indim)
+        self._back = tf.reshape(tf.sigmoid(tf.matmul(self.next.back(),tf.transpose(self.W))),self._indim)
         self.prev.build_back()
 
     def params(self):
@@ -290,6 +324,7 @@ class ConvLayer(FeedThroughLayer):
           self.W = tf.Variable(
                                tf.truncated_normal(dims,
                                                  stddev=math.sqrt(1.0/(reduce(mul,self.d.filterdim()))),
+                                                 mean=100,
                                                  dtype=tf.float32
                                                  ),
                                name='W_'+str(self.n))
@@ -299,26 +334,26 @@ class ConvLayer(FeedThroughLayer):
                                                  dtype=tf.float32
                                                  )
                                   )
-          self._top = tf.tanh(tf.nn.conv2d(self.prev.top(), self.W, self.d.strides(), "SAME")+self.bias)
+          self._top = tf.sigmoid(tf.nn.conv2d(self.prev.top(), self.W, self.d.strides(), "SAME"))#+self.bias)
           if self.next != self:
               self.next.build()
           else:
               self.build_loop()
 
     def build_loop(self):
-        self._recon = tf.tanh(tf.nn.deconv2d(self.top(), tf.transpose(self.W, [1,0,2,3] ), self.prev.top().get_shape().as_list(), self.d.strides()))
+        self._recon = tf.sigmoid(tf.nn.deconv2d(self.top(), tf.transpose(self.W, [1,0,2,3] ), self.prev.top().get_shape().as_list(), self.d.strides()))
         self.prev.build_rev()
         
     def build_rev(self):
-        self._recon = tf.tanh(tf.nn.deconv2d(self.next.recon(), tf.transpose(self.W, [1,0,2,3] ), self.prev.top().get_shape().as_list(), self.d.strides()))
+        self._recon = tf.sigmoid(tf.nn.deconv2d(self.next.recon(), tf.transpose(self.W, [1,0,2,3] ), self.prev.top().get_shape().as_list(), self.d.strides()))
         self.prev.build_rev()
  
     def inject(self,i):
-        self._back = tf.tanh(tf.nn.deconv2d(i, tf.transpose(self.W, [1,0,2,3] ), self.prev.top().get_shape().as_list(), self.d.strides()))
+        self._back = tf.sigmoid(tf.nn.deconv2d(i, tf.transpose(self.W, [1,0,2,3] ), self.prev.top().get_shape().as_list(), self.d.strides()))
         self.prev.build_back()
         
     def build_back(self):
-        self._back = tf.tanh(tf.nn.deconv2d(self.next.back(), tf.transpose(self.W, [1,0,2,3] ), self.prev.top().get_shape().as_list(), self.d.strides()))
+        self._back = tf.sigmoid(tf.nn.deconv2d(self.next.back(), tf.transpose(self.W, [1,0,2,3] ), self.prev.top().get_shape().as_list(), self.d.strides()))
         self.prev.build_back()
         
     def params(self):
@@ -345,19 +380,19 @@ class PoolingLayer(Layer):
             self.build_loop()
 
   def build_loop(self):
-      self._recon = tf.tanh(tf.nn.deconv2d(self.top(), tf.transpose(self.W, [1,0,2,3] ), self.prev.top().get_shape().as_list(), self.d.strides()))
+      self._recon = tf.sigmoid(tf.nn.deconv2d(self.top(), tf.transpose(self.W, [1,0,2,3] ), self.prev.top().get_shape().as_list(), self.d.strides()))
       self.prev.build_rev()
       
   def build_rev(self):
-      self._recon = tf.tanh(tf.nn.deconv2d(self.next.recon(), tf.transpose(self.W, [1,0,2,3] ), self.prev.top().get_shape().as_list(), self.d.strides()))
+      self._recon = tf.sigmoid(tf.nn.deconv2d(self.next.recon(), tf.transpose(self.W, [1,0,2,3] ), self.prev.top().get_shape().as_list(), self.d.strides()))
       self.prev.build_rev()
     
   def inject(self,i):
-      self._back = tf.tanh(tf.nn.deconv2d(i, tf.transpose(self.W, [1,0,2,3] ), self.prev.top().get_shape().as_list(), self.d.strides()))
+      self._back = tf.sigmoid(tf.nn.deconv2d(i, tf.transpose(self.W, [1,0,2,3] ), self.prev.top().get_shape().as_list(), self.d.strides()))
       self.prev.build_back()
       
   def build_back(self):
-      self._back = tf.tanh(tf.nn.deconv2d(self.next.back(), tf.transpose(self.W, [1,0,2,3] ), self.prev.top().get_shape().as_list(), self.d.strides()))
+      self._back = tf.sigmoid(tf.nn.deconv2d(self.next.back(), tf.transpose(self.W, [1,0,2,3] ), self.prev.top().get_shape().as_list(), self.d.strides()))
       self.prev.build_back()
       
   def params(self):
@@ -373,17 +408,39 @@ class AutoEncoder(object):
         self.layers = [DataLayer(self.dp)]
         self.bottom_feed = self.layers[0].bottom_feed()
         self.LEARNING_RATE=0.7
-        self.alpha = 0.1
-        self.freeze = False
-        self.sparsity_target = 0.05
-        self.sparsity_lr = 6
+        self.alpha = 0.0
+        self.freeze = True
+        self.sparsity_target = 1.0
+        self.sparsity_lr = 0.000
+        self.EPS  = 0.0000001
+        self.save_path = "log2/"
+        
 
     def kl(self,p, p_hat):
       a = p*tf.log(tf.div(p,p_hat))
       b = (1-p)*tf.log(tf.div((1-p),(1-p_hat)))
       return tf.reduce_mean(a+b)
+    
+    def cross_entropy(self,p, p_hat):
+      a = tf.mul(p,tf.log(self.EPS+p_hat))
+      b = tf.mul((1-p),tf.log(1-p_hat+self.EPS))
+      return a+b
+    
+    def save(self):
+      parameterlayers = self.layers
+      if self.freeze:
+        parameterlayers = [self.layers[-1]]
+      params = [w for l in parameterlayers for w in l.params()]
+      if len(params) == 0:
+        return 
+      saver = tf.train.Saver(params)
+      saver.save(self.s,path.join(self.save_path,'layer'+str(len(self.layers))))
         
     def add_layer(self,definition):
+      self.save()
+      #Get hyperparameters
+      
+      
       #Insert into stack
       l = definition.instance()
       l.set_params(definition, len(self.layers))
@@ -392,44 +449,60 @@ class AutoEncoder(object):
       self.layers.append(l)
       l.build()
       
-      #Reference key layer inputs/outputs
+      #Reference new layer inputs/outputs
       self._top = self.layers[-1].top()
-      self.injection = tf.placeholder(tf.float32, self._top.get_shape().as_list(), "data")
+      self.injection = tf.placeholder(tf.float32, self._top.get_shape().as_list(), "top_data_injection")
       l.inject(self.injection)
       self._recon = self.layers[0].recon()
-      depth = min(len(self.layers)-1,10)
+      depth = 1 #min(len(self.layers)-1,10)
       self._rep_recon = self.layers[-depth].recon()
-      self.ground_truth = (self.layers[-depth]).prev.top()
-      self.back = self.layers[0].back()
+      self._rep_ground_truth = (self.layers[-depth]).prev.truth()
+      self._back = self.layers[0].back()
+      writer = tf.train.SummaryWriter(self.save_path,self.s.graph_def)
       
       #Build loss and optimization functions
-      self._individual_reconstruction_loss = tf.reduce_mean(tf.pow(self._recon - self.bottom_feed,2),
-                                                      reduction_indices=[1,2,3] )
-      reconstruction_loss = tf.reduce_mean(tf.pow(self._rep_recon - self.ground_truth,2))
-      sparsity_loss = reduce(add, 
-                             [tf.reduce_mean(tf.pow(tf.sub(
-                                      self.sparsity_target,
-                                      tf.abs(
-                                             tf.reduce_mean(
-                                                            l.top(),
-                                                            reduction_indices=[0,1,2]
+      self._individual_reconstruction_loss = tf.reduce_mean(
+                                                            -self.cross_entropy(
+                                                                                self._rep_ground_truth ,
+                                                                                self._rep_recon),
+                                                            reduction_indices=range(
+                                                                                    1,
+                                                                                    self._rep_recon.get_shape().ndims) 
                                                             )
-                                             )
-                                      ),2))
-                               for l in self.layers])
+      reconstruction_loss = tf.reduce_mean(
+                                           -self.cross_entropy(
+                                                               self.bottom_feed ,
+                                                               self._recon))
+      self._loss = reconstruction_loss
+      #Sparsity
+      if self.sparsity_lr > 0.0:
+        sparsity_loss = reduce(add, 
+                               [tf.reduce_mean(tf.pow(tf.sub(
+                                        self.sparsity_target/l.top().get_shape().as_list()[-1],
+                                        tf.abs(
+                                               tf.reduce_mean(
+                                                              l.top(),
+                                                              reduction_indices=range(l.top().get_shape().ndims)
+                                                              )
+                                               )
+                                        ),2))
+                                 for l in self.layers])
+        self._loss += self.sparsity_lr*sparsity_loss
+      #Weight Decay
       params = [tf.reduce_sum(tf.pow(w,2)) for l in self.layers for w in l.params()]
-      weight_decay = 0
-      if len(params) > 0:
+      if self.alpha >0 and len(params) > 0:
         paramsize = reduce(add,[reduce(mul,w.get_shape().as_list())  for l in self.layers for w in l.params() ])
         weight_decay = reduce(add,params)/paramsize
-        self._loss = reconstruction_loss + self.alpha*weight_decay + self.sparsity_lr*sparsity_loss
-        # Optimization
-        parameterlayers = self.layers
-        if self.freeze:
-          parameterlayers = [self.layers[-1]]
+        self._loss += self.alpha*weight_decay
+      # Optimization
+      parameterlayers = self.layers
+      if self.freeze:
+        parameterlayers = [self.layers[-1]]
+      params = [w for l in parameterlayers for w in l.params()]
+      if len(params) > 0:
         self.optimizer = tf.train.MomentumOptimizer(self.LEARNING_RATE,0.9,use_locking=True) \
-                                  .minimize(self._loss, var_list=[w for l in parameterlayers for w in l.params()])
-    
+                                .minimize(self._loss, var_list=params)
+  
     def top_shape(self):
       return self.injection.get_shape().as_list()
     
@@ -437,7 +510,7 @@ class AutoEncoder(object):
       return self.s.run(self._top, feed_dict={self.bottom_feed:data})
   
     def inject(self,data):
-      return self.s.run(self.back, feed_dict={self.injection:data})
+      return self.s.run(self._back, feed_dict={self.injection:data})
     
     def recon(self,data):
           feed_dict = {self.bottom_feed:data}
@@ -456,7 +529,7 @@ class AutoEncoder(object):
         
     def encode_mb(self,data): 
           feed_dict = {self.bottom_feed:data}
-          dummy, l = self.s.run([self.optimizer,self._loss],feed_dict=feed_dict)
+          _,dummy, l = self.s.run([self._top,self.optimizer,self._loss],feed_dict=feed_dict)
           #print("_loss: {}".format(_loss))
           return l
           

@@ -13,6 +13,7 @@ import scipy.io as si
 from PIL import Image
 from google.protobuf import text_format
 import cPickle
+import gzip
 
 from caffe import *
 
@@ -301,7 +302,84 @@ class CifarDataProvider:
         yield (samples,labels,keys)
         i += self.batch_size
           
-        
+  
+  
+  
+class MnistDataProvider:
+  
+  def __init__(self, data_param, transform_param, mm_batch_num=1):
+    self.files = data_param.source
+    self.batch_size = data_param.batch_size / mm_batch_num
+    self.crop_size = transform_param.crop_size
+    self.mirror = transform_param.mirror
+    self._data = self.extract_data(self.files[0],self.get_n_examples())
+    self._labels = self.extract_labels(self.files[1], self.get_n_examples())
+  
+  
+  def extract_data(self,filename, num_images):
+    """Extract the images into a 4D tensor [image index, y, x, channels].
+  
+    Values are rescaled from [0, 255] down to [0, 1.0].
+    """
+    print('Extracting', filename)
+    dim = self.shape()[1]
+    with gzip.open(filename) as bytestream:
+      bytestream.read(16)
+      buf = bytestream.read(dim * dim * num_images)
+      data = numpy.frombuffer(buf, dtype=numpy.uint8).astype(numpy.float32)
+#       data = data  /  255
+      data = data.reshape(num_images, dim, dim, 1)
+      data = self.normalize(data)
+      return data   
+    
+  def extract_labels(self, filename, num_images):
+    """Extract the labels into a 1-hot matrix [image index, label index]."""
+    print('Extracting', filename)
+    with gzip.open(filename) as bytestream:
+      bytestream.read(8)
+      buf = bytestream.read(1 * num_images)
+      labels = numpy.frombuffer(buf, dtype=numpy.uint8)
+    # Convert to dense 1-hot representation.
+    return labels
+  
+  def get_n_examples(self):
+    return 60000
+   
+  def get_keys(self):
+    return range(self.get_n_examples())
+
+  def shape(self):
+      return (self.batch_size, 28,28,1)
+
+  def normalize(self,raw_image):
+    return (raw_image.astype(np.float32))/255.0
+  
+  def denormalize(self,normal_image):
+    return (normal_image*255.0).astype(np.uint8)
+
+  def get_mb_by_keys(self,keys):
+    samples = np.zeros(self.shape(), dtype=np.float32)
+    labels = np.zeros([len(keys)],dtype=np.uint8)
+    sorted_keys = sorted(keys)
+    for n,key in enumerate(sorted_keys):
+      i = int(key)
+      samples[n,:,:,:] = self._data[i,:,:,:]
+      labels[n] = self._labels[i]
+    return (samples,labels,keys)
+    
+
+  def get_mb(self):
+    samples = np.zeros(self.shape(), dtype=np.float32)
+    labels = np.zeros([self.batch_size])
+    i = 0
+    while i < (self.get_n_examples() - self.batch_size):
+      samples[:,:,:,:] = self._data[i:i+self.batch_size,:,:,:]
+      labels = self._labels[i:i+self.batch_size]
+      keys = range(i,i+self.batch_size)
+      yield (samples,labels,keys)
+      i += self.batch_size  
+  
+  
           
 if __name__ == "__main__":
   import matplotlib.pyplot as plt
@@ -315,9 +393,11 @@ if __name__ == "__main__":
   TRANSFORM_PARAM.crop_size = 16
   TRANSFORM_PARAM.mirror = False
   DATA_PARAM.source = sys.argv[1:]
-  dp = CifarDataProvider(DATA_PARAM,TRANSFORM_PARAM )
-  for d,l,k in dp.get_mb(8):
-    print k
-#     plt.imshow(dp.denormalize(d[0]))
-#     plt.colorbar()
-#     plt.show()      
+  dp = MnistDataProvider(DATA_PARAM,TRANSFORM_PARAM )
+  for d,l,k in dp.get_mb():
+    print d.shape
+    plt.imshow(dp.denormalize(d[0,:,:,:].squeeze()))
+    plt.colorbar()
+    plt.show()      
+    
+    

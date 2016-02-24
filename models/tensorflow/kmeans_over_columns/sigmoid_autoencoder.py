@@ -191,7 +191,7 @@ class FeedThroughLayer(Layer):
       :type l: Layer
       '''     
       self.prev = l
-      self.build()   
+      #self.build()   
       
   def build(self):
       if self.prev and self.next and self.prev != self: 
@@ -280,32 +280,38 @@ class FCLayer(FeedThroughLayer):
           self.bias = tf.Variable(
                                   tf.zeros([self.d.outdim()]),
                                   name='bias_'+str(self.n))
-          #print(self.W.get_shape().with_rank(2))
+          self.rev_bias = tf.Variable(
+                                  tf.zeros([self._indim[-1]]),
+                                  name='rev_bias_'+str(self.n))
+          print("RB")
           flat_in = tf.reshape(self.prev.top(),[self._indim[0],-1])
-          self._top = tf.sigmoid(tf.matmul(flat_in,self.W))
+          self._top = tf.sigmoid(tf.add(tf.matmul(flat_in,self.W),self.bias))
           if self.next != self:
               self.next.build()
           else:
               self.build_loop()
                 
     def build_loop(self):
-        self._recon = tf.reshape(tf.sigmoid(tf.matmul(self.top(),tf.transpose(self.W))),self._indim)
+        self._recon = self.compute_back(self.top()) 
         self.prev.build_rev()
         
     def build_rev(self):
-        self._recon = tf.reshape(tf.sigmoid(tf.matmul(self.next.recon(),tf.transpose(self.W))),self._indim)
+        self._recon = self.compute_back(self.next.recon()) 
         self.prev.build_rev()
  
     def inject(self,i):
-        self._back = tf.reshape(tf.sigmoid(tf.matmul(i,tf.transpose(self.W))),self._indim)
+        self._back = self.compute_back(i)
         self.prev.build_back()
         
     def build_back(self):
-        self._back = tf.reshape(tf.sigmoid(tf.matmul(self.next.back(),tf.transpose(self.W))),self._indim)
+        self._back = self.compute_back(self.next.back())
         self.prev.build_back()
+    
+    def compute_back(self,top):
+      return tf.sigmoid(tf.add(tf.reshape(tf.matmul(top,tf.transpose(self.W)),self._indim),self.rev_bias))
 
     def params(self):
-      return [self.W, self.bias]
+      return [self.W, self.bias, self.rev_bias]
     
     
 
@@ -324,7 +330,6 @@ class ConvLayer(FeedThroughLayer):
           self.W = tf.Variable(
                                tf.truncated_normal(dims,
                                                  stddev=math.sqrt(1.0/(reduce(mul,self.d.filterdim()))),
-                                                 mean=100,
                                                  dtype=tf.float32
                                                  ),
                                name='W_'+str(self.n))
@@ -334,7 +339,7 @@ class ConvLayer(FeedThroughLayer):
                                                  dtype=tf.float32
                                                  )
                                   )
-          self._top = tf.sigmoid(tf.nn.conv2d(self.prev.top(), self.W, self.d.strides(), "SAME"))#+self.bias)
+          self._top = tf.sigmoid(tf.nn.conv2d(self.prev.top(), self.W, self.d.strides(), "Conv_"+str(self.n)+"_top")+self.bias)
           if self.next != self:
               self.next.build()
           else:
@@ -407,13 +412,14 @@ class AutoEncoder(object):
         self.s = s
         self.layers = [DataLayer(self.dp)]
         self.bottom_feed = self.layers[0].bottom_feed()
-        self.LEARNING_RATE=0.7
+        self.LEARNING_RATE=0.9
         self.alpha = 0.0
         self.freeze = True
         self.sparsity_target = 1.0
         self.sparsity_lr = 0.000
         self.EPS  = 0.0000001
         self.save_path = "log2/"
+        self.summaryid = 0
         
 
     def kl(self,p, p_hat):
@@ -447,6 +453,7 @@ class AutoEncoder(object):
       l.set_next(l)
       self.layers[-1].set_next(l)
       self.layers.append(l)
+      print("BUILD")
       l.build()
       
       #Reference new layer inputs/outputs
@@ -458,7 +465,7 @@ class AutoEncoder(object):
       self._rep_recon = self.layers[-depth].recon()
       self._rep_ground_truth = (self.layers[-depth]).prev.truth()
       self._back = self.layers[0].back()
-      writer = tf.train.SummaryWriter(self.save_path,self.s.graph_def)
+
       
       #Build loss and optimization functions
       self._individual_reconstruction_loss = tf.reduce_mean(
@@ -471,8 +478,8 @@ class AutoEncoder(object):
                                                             )
       reconstruction_loss = tf.reduce_mean(
                                            -self.cross_entropy(
-                                                               self.bottom_feed ,
-                                                               self._recon))
+                                                               self._rep_ground_truth ,
+                                                               self._rep_recon))
       self._loss = reconstruction_loss
       #Sparsity
       if self.sparsity_lr > 0.0:
@@ -495,13 +502,20 @@ class AutoEncoder(object):
         weight_decay = reduce(add,params)/paramsize
         self._loss += self.alpha*weight_decay
       # Optimization
-      parameterlayers = self.layers
-      if self.freeze:
-        parameterlayers = [self.layers[-1]]
+      parameterlayers = [self.layers[-1]]
+      initparams = [w for l in parameterlayers for w in l.params()]
+      if not self.freeze:
+        parameterlayers = self.layers
       params = [w for l in parameterlayers for w in l.params()]
       if len(params) > 0:
-        self.optimizer = tf.train.MomentumOptimizer(self.LEARNING_RATE,0.9,use_locking=True) \
-                                .minimize(self._loss, var_list=params)
+        self.optimizer = tf.train.MomentumOptimizer(self.LEARNING_RATE,0.9,use_locking=True)
+        self.optimizer_objective = self.optimizer.minimize(self._loss, var_list=params)
+        self.writer = tf.train.SummaryWriter(self.save_path,self.s.graph_def)
+        summarylist = [tf.histogram_summary(str(len(self.layers))+"_"+str(i),p) for i,p in enumerate(params)]
+        self. summaries = tf.merge_all_summaries()
+        #Initialize new Variables
+        initparams += [self.optimizer.get_slot(v,n) for v in params for n in self.optimizer.get_slot_names()]
+      tf.initialize_variables(initparams).run()
   
     def top_shape(self):
       return self.injection.get_shape().as_list()
@@ -529,8 +543,9 @@ class AutoEncoder(object):
         
     def encode_mb(self,data): 
           feed_dict = {self.bottom_feed:data}
-          _,dummy, l = self.s.run([self._top,self.optimizer,self._loss],feed_dict=feed_dict)
-          #print("_loss: {}".format(_loss))
+          summary_str,_,dummy, l = self.s.run([self.summaries, self._recon,self.optimizer_objective,self._loss],feed_dict=feed_dict)
+          self.writer.add_summary(summary_str,self.summaryid)
+          self.summaryid +=1
           return l
           
 

@@ -49,35 +49,20 @@ LAYERS = [
 LAYERS = [
           {"Layerdef":CorruptionLayerDef(0.001),
            "Train":False},
-           {"Layerdef":ConvLayerDef(1,1,1),
-            "Pretrain_epochs":-1,
-            "Patience": 5,
-            "Patience_delta": 0.0001,
-            "Convergence_threshold":0.0},
-          {'Layerdef':FeedThroughLayerDef(),
-           "Train":False},
-          {"Layerdef":ConvLayerDef(1,1,1),
-            "Pretrain_epochs":-1,
-            "Patience": 5,
-            "Patience_delta": 0.0001,
-            "Convergence_threshold":0.0},
-          {"Layerdef":ConvLayerDef(1,1,1),
-            "Pretrain_epochs":-1,
-            "Patience": 5,
-            "Patience_delta": 0.0001,
-            "Convergence_threshold":0.0},
           {'Layerdef':FCLayerDef(128,lr=0.7),
            "Pretrain_epochs":-1,
-           "Patience": 2,
+           "Patience": 10,
            "Patience_delta": 0.01,
            "Convergence_threshold":0.0},
-          {'Layerdef':FCLayerDef(8,lr=0.9),
+          {'Layerdef':FCLayerDef(32,lr=0.9),
            "Pretrain_epochs":-1,
            "Patience": 10,
-           "Patience_delta": 0.00001,
+           "Patience_delta": 0.01,
            "Convergence_threshold":0.0},
           {'Layerdef':FCLayerDef(10),
            "Pretrain_epochs":-1,
+           "Patience": 10,
+           "Patience_delta": 0.01,
            "Convergence_threshold":0.0},
          ]
 
@@ -252,7 +237,6 @@ if __name__ == '__main__':
         for column in columns.values():
           column.add_layer(l['Layerdef'])
         print "{} added".format(l['Layerdef'])
-        tf.initialize_all_variables().run()
         
         if l.get('Train',True):
           #Pretrain on all data

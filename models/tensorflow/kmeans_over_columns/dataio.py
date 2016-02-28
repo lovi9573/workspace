@@ -254,10 +254,10 @@ class CifarDataProvider:
       return (self.batch_size, self.crop_size, self.crop_size,3)
 
   def normalize(self,raw_image):
-    return (raw_image.astype(np.float32) - self.mean_data)/127.0
+    return (raw_image.astype(np.float32))/255.0
   
   def denormalize(self,normal_image):
-    return (normal_image*127.0 +127).astype(np.uint8)
+    return (normal_image*255.0).astype(np.uint8)
 
   def get_mb_by_keys(self,keys):
     samples = np.zeros([len(keys), self.crop_size,self.crop_size,3], dtype=np.float32)

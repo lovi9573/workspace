@@ -15,6 +15,8 @@ from weights_to_img import display
 from itertools import islice, cycle
 from dnf.cli.output import Output
 from PIL import Image
+import math
+import weights_to_img as w2i
 
 class Object:
     pass
@@ -46,48 +48,81 @@ LAYERS = [
 #            "Convergence_threshold":0.99}
           ]
 """
+"""
 LAYERS = [
-          {"Layerdef":CorruptionLayerDef(0.001),
+          {"Layerdef":CorruptionLayerDef(0.15),
            "Train":False},
           {'Layerdef':FCLayerDef(128,lr=0.7),
            "Pretrain_epochs":-1,
            "Patience": 10,
-           "Patience_delta": 0.01,
+           "Patience_delta": 0.0001,
            "Convergence_threshold":0.0},
-          {'Layerdef':FCLayerDef(32,lr=0.9),
+          {'Layerdef':FCLayerDef(64,lr=0.9),
            "Pretrain_epochs":-1,
            "Patience": 10,
-           "Patience_delta": 0.01,
+           "Patience_delta": 0.0001,
+           "Convergence_threshold":0.0},
+          {'Layerdef':FCLayerDef(32),
+           "Pretrain_epochs":-1,
+           "Patience": 10,
+           "Patience_delta": 0.0001,
+           "Convergence_threshold":0.0},
+          {'Layerdef':FCLayerDef(16),
+           "Pretrain_epochs":-1,
+           "Patience": 10,
+           "Patience_delta": 0.0001,
            "Convergence_threshold":0.0},
           {'Layerdef':FCLayerDef(10),
            "Pretrain_epochs":-1,
            "Patience": 10,
-           "Patience_delta": 0.01,
+           "Patience_delta": 0.0001,
            "Convergence_threshold":0.0},
          ]
-
+"""
 """
 Mnist setup
+"""
 LAYERS = [
-          {"Layerdef":CorruptionLayerDef(0.0),
-           "Train":False},
+#           {"Layerdef":CorruptionLayerDef(0.0),
+#            "Train":False},
 #           {'Layerdef':FCLayerDef(1024),
 #            "Pretrain_epochs":-1,
 #            "Convergence_threshold":0.0},
-          {"Layerdef":ConvLayerDef(7,3,64),
+          {"Layerdef":ConvLayerDef(5,2,16,padding='SAME',tied_weights=False ),
+              "Pretrain_epochs":0,
+               "Patience": 5,
+               "Patience_delta": 0.00001,
+               "Convergence_threshold":0.0}, #out: 16
+#           {"Layerdef":ConvLayerDef(1,1,12,tied_weights=False),
+#                "Pretrain_epochs":-1,
+#                "Patience": 5,
+#                "Patience_delta": 0.01,
+#                "Convergence_threshold":0.0}, #out: 15
+          {"Layerdef":ConvLayerDef(5,2,128,padding='SAME',tied_weights=False),
+               "Pretrain_epochs":0,
+               "Patience": 5,
+               "Patience_delta": 0.00001,
+               "Convergence_threshold":0.0}, #out: 8
+          {"Layerdef":ConvLayerDef(3,1,256,tied_weights=False),
+               "Pretrain_epochs":-1,
+               "Patience": 5,
+               "Patience_delta": 0.00001,
+               "Convergence_threshold":0.0}, #out:6
+          {"Layerdef":ConvLayerDef(3,1,512,tied_weights=False),
+               "Pretrain_epochs":-1,
+               "Patience": 5,
+               "Patience_delta": 0.001,
+               "Convergence_threshold":0.0}, #out: 4
+          {'Layerdef':FCLayerDef(256,sparsity_target=0.02, sparsity_lr=0.3, activation_entropy_lr=0.1),
            "Pretrain_epochs":-1,
-           "Convergence_threshold":0.0,
-           "Sparsity_lr": 0.0,
-           "Sparsity_target":0.05},
-          {"Layerdef":ConvLayerDef(4,2,128),
-           "Pretrain_epochs":-1,
+           "Patience": 5,
+           "Patience_delta": 0.001,
            "Convergence_threshold":0.0},
-          {"Layerdef":ConvLayerDef(2,1,196),
-           "Pretrain_epochs":-1,
-           "Convergence_threshold":0.0},
-          {"Layerdef":ConvLayerDef(3,1,32),
-           "Pretrain_epochs":-1,
-           "Convergence_threshold":0.0},
+#           {"Layerdef":ConvLayerDef(3,1,32,sparsity_target=0.03, sparsity_lr=0.1),
+#                "Pretrain_epochs":-1,
+#                "Patience": 5,
+#                "Patience_delta": 0.001,
+#                "Convergence_threshold":0.0},
 #           {"Layerdef":ConvLayerDef(3,1,32),
 #             "Pretrain_epochs":-1,
 #             "Convergence_threshold":0.0},
@@ -95,18 +130,19 @@ LAYERS = [
 #            "Pretrain_epochs":10,
 #            "Convergence_threshold":0.99}
           ]
-"""
 
 DATA_PARAM = Object()
-DATA_PARAM.batch_size = 128
+DATA_PARAM.batch_size = 256
 TRANSFORM_PARAM = Object()
 TRANSFORM_PARAM.mean_file = ""
 TRANSFORM_PARAM.mean_value = [127,127,127]
-TRANSFORM_PARAM.crop_size = 28
+TRANSFORM_PARAM.crop_size = 32
 TRANSFORM_PARAM.mirror = False
 NUM_LABELS = 10
 SHOW = False
-LOG_DIR = 'log2/'
+LOG_DIR = 'log/'
+IMG_DIR = 'img/'
+CHECKPOINT_DIR = 'check/'
 
 def converged(a, b):
   if a == None or b == None:
@@ -196,7 +232,61 @@ def encode_even(imap, columns, keys, epochs, epoch_num):
             losses[colnum] += columns[colnum].encode_mb(s)
     return dict([(col, loss/n_updates) for col,loss in losses.iteritems()])
             
-    
+
+def save_recon(dp, columns):
+    for n,column in columns.iteritems():
+      d,r = column.recon(dp.get_mb().next()[0])
+      if r.shape[-1] == 1:
+        im = Image.fromarray(np.append(dp.denormalize(d[4]),dp.denormalize(r[4]),axis=0).astype(np.uint8).squeeze(),mode='L')
+      else:
+        im = Image.fromarray(np.append(dp.denormalize(d[4]),dp.denormalize(r[4]),axis=0).squeeze())
+      im.save(IMG_DIR+'im_recon_col'+str(n)+'_level'+str(layer_number+1)+'.png')
+      top_shape = column.top_shape()
+      a = np.zeros(top_shape)
+      input_shape = dp.shape()
+      imgs = np.zeros([top_shape[-1]] + list(input_shape[1:]))
+      for channel in range(top_shape[-1]):
+        b = a.copy()
+        if len(top_shape) == 4:
+          b[0,top_shape[1]/2,top_shape[2]/2,channel] = 1
+        elif len(top_shape) == 2:
+          b[0,channel] = 1
+        c = column.inject(b)
+        imgs[channel,:,:,:] = c[0,:,:,:]
+      im = w2i.tile_imgs(imgs, normalize=True)
+#       im = Image.fromarray(dp.denormalize(c[0,:]).astype(np.uint8).squeeze(),mode='L')
+      im.save(IMG_DIR+'col'+str(n)+'_level'+str(layer_number+1)+'.png')    
+
+def save_top(dp, columns):
+    for n,column in columns.iteritems():
+      t = column.fwd(dp.get_mb().next()[0])
+      top_shape = column.top_shape()
+      if len(top_shape) == 4:
+        tiled = w2i.tile_imgs(t)
+        mn = np.min(tiled)
+        mx = np.max(tiled)
+        tiled = ((tiled-mn)/(mx-mn)*256).astype(np.uint8)
+        im = Image.fromarray(tiled)
+  #       im = Image.fromarray(dp.denormalize(c[0,:]).astype(np.uint8).squeeze(),mode='L')
+        im.save(IMG_DIR+'col'+str(n)+'_level'+str(layer_number+1)+'_top.png')   
+
+def save_exemplars(dp, columns):
+      for i in range(len(columns)):
+        print "Example for column {}".format(i)
+        key = None
+        map_iter = immap['key2col'].iterkeys()
+        try:
+          while(key==None):
+            k = map_iter.next()
+            if immap['key2col'][k] == i:
+              key = k
+          sample = dp.get_mb_by_keys([key])
+          plt.imshow(dp.denormalize(sample[0][0,:]))
+          plt.show()
+        except StopIteration:
+          pass
+        #display(dp.denormalize(s.run(columns[i].layers[-1].W).transpose([3,0,1,2])))
+
  
 def mapping_stats(mapping):
   counts = {}
@@ -224,12 +314,12 @@ if __name__ == '__main__':
       print "Usage: python dynamic_columns.py <path to data> [<>]"
       sys.exit(-1)
     DATA_PARAM.source = sys.argv[1:]
-    dp = MnistDataProvider(DATA_PARAM,TRANSFORM_PARAM )
+    dp = CifarDataProvider(DATA_PARAM,TRANSFORM_PARAM )
     imgkeys = dp.get_keys()
     columns = {}
     with tf.Session() as s:
       for i in range(N_COLUMNS):
-        columns[i] = AutoEncoder(s,dp)
+        columns[i] = AutoEncoder(s,dp,LOG_DIR, CHECKPOINT_DIR)
       print "Columns Initialized"
       
       #Iterate over layer definitions to build a column
@@ -253,7 +343,7 @@ if __name__ == '__main__':
               for col in best_loss.keys():
                 best_loss[col] = min(best_loss[col],losses[col])
               losses = pretrain_epoch(columns, dp, i)
-              if min([(ln - lo)/lo  for ln,lo in zip(losses.values(),best_loss.values())]) < -l.get("Patience_delta",0.1):
+              if min([(ln - lo)/abs(lo)  for ln,lo in zip(losses.values(),best_loss.values())]) < -l.get("Patience_delta",0.1):
                 patience = 0
                 print("\tAve loss: {} ***".format([str(c)+":"+str(los) for c,los in losses.iteritems()]))
               else:
@@ -261,26 +351,11 @@ if __name__ == '__main__':
                 patience += 1
               i += 1
           print "All columns trained on all data {} epochs".format(l.get('Pretrain_epochs',0))
-          
+
           #Visual investigation
-          for n,column in columns.iteritems():
-            print "\tColumn {}".format(n)
-            d,r = column.recon(dp.get_mb().next()[0])
-            im = Image.fromarray(np.append(dp.denormalize(d[4]),dp.denormalize(r[4]),axis=0).astype(np.uint8).squeeze(),mode='L')
-            im.save(LOG_DIR+'im_recon_col'+str(n)+'_level'+str(layer_number)+'.png')
-            shape = column.top_shape()
-            print shape
-            a = np.zeros(shape)
-            for channel in range(shape[-1]):
-              b = a.copy()
-              if len(shape) == 4:
-                b[0,shape[1]/2,shape[2]/2,channel] = 1
-              elif len(shape) == 2:
-                b[0,channel] = 1
-              c = column.inject(b)
-              print c.shape
-              im = Image.fromarray(dp.denormalize(c[0,:]).astype(np.uint8).squeeze(),mode='L')
-              im.save(LOG_DIR+'col'+str(n)+'_level'+str(layer_number)+'_channel'+str(channel)+'.png')
+          save_recon(dp,columns)   
+          save_top(dp,columns)       
+
           
           immap_old = {'key2col':None}
           immap = map_img_2_col(columns)
@@ -295,22 +370,7 @@ if __name__ == '__main__':
             epoch_num += N_STEPS
             immap_old = immap
             immap = map_img_2_col(columns)
-          if SHOW:
-            for i in range(len(columns)):
-              print "Example for column {}".format(i)
-              key = None
-              map_iter = immap['key2col'].iterkeys()
-              try:
-                while(key==None):
-                  k = map_iter.next()
-                  if immap['key2col'][k] == i:
-                    key = k
-                sample = dp.get_mb_by_keys([key])
-                plt.imshow(dp.denormalize(sample[0][0,:]))
-                plt.show()
-              except StopIteration:
-                pass
-              #display(dp.denormalize(s.run(columns[i].layers[-1].W).transpose([3,0,1,2])))
+
           
           #Get column entropy
           columnlabels = dict([(col,[0]*NUM_LABELS) for col in columns.keys()])
@@ -334,7 +394,7 @@ if __name__ == '__main__':
           print(output)
           
           #print column mapping
-          with open(LOG_DIR+"col2key",'w') as fout:
+          with open(IMG_DIR+"col2key",'w') as fout:
             fout.write(output)
             fout.write(str(immap['col2key']))
       

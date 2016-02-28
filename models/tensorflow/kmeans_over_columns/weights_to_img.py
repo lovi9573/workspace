@@ -5,7 +5,9 @@ import sys
 import re
 import math
 from operator import mul,add
+from PIL import Image
 """
+
 Input file must be a flat vector of image values.
 Assume n images of v pixels.
 All n pixel 0's will be consecutive, followed by all n pixel 1's, etc...
@@ -40,8 +42,38 @@ def closeFactor(numbera, target):
             return target-d
         d += 1
     return numbera        
- 
-def tile_imgs(dat):       
+
+
+def tile_rgb_imgs(dat):
+  """
+  tiles and displays input as images
+  dat: an n,y,x,3 array
+  
+  """
+  n,y,x,c = dat.shape
+  print dat.shape
+  minval = np.min(dat)
+  maxval = np.max(dat)
+  dat = (dat - minval)/(maxval-minval)*255
+  dat = dat.astype(np.uint8)
+  horizontal_images_in_display_ideal = math.sqrt(n)
+  horizontal_images_in_display = closeFactor(n, horizontal_images_in_display_ideal)
+  vertical_images_in_display = n/horizontal_images_in_display
+  
+  imgs = np.ndarray([vertical_images_in_display*(y+1),horizontal_images_in_display*(x+1),3],dtype=np.uint8)
+  imgs[:,:,:] = 0  
+  
+  for img_row in range(vertical_images_in_display):
+          for img in range(horizontal_images_in_display):
+              imgs[img_row*(y+1):(img_row+1)*(y+1)-1, \
+                   img*(x+1):(img+1)*(x+1)-1,\
+                   :] = \
+              dat[(img_row*horizontal_images_in_display+img),:,:,:]
+  print imgs.shape
+  return Image.fromarray(imgs,mode='RGB')  
+  
+  
+def tile_imgs(dat, normalize=False):       
   """
   tiles and displays input as images
   dat: an n,y,x,c array
@@ -50,17 +82,22 @@ def tile_imgs(dat):
   n,y,x,c = dat.shape
   minval = np.min(dat)
   maxval = np.max(dat)
+  if normalize:
+    dat = (dat - minval)/(maxval-minval)
   print "max: {} min: {}\n".format(maxval,minval)
   
-  horizontal_images_in_display_ideal = math.sqrt(n*c)
-  if n == 1:
-      horizontal_images_in_display = closeFactor(c, horizontal_images_in_display_ideal)
-      print "horizontal_images_in_display",horizontal_images_in_display
-  elif c == 1:
-      horizontal_images_in_display = closeFactor(n, horizontal_images_in_display_ideal)
-  else:
-      horizontal_images_in_display = closeCommonFactor(n*c, c, horizontal_images_in_display_ideal)
-  vertical_images_in_display = n*c/horizontal_images_in_display
+  if n == 1 and c != 3:
+    horizontal_images_in_display_ideal = math.sqrt(n*c)
+    horizontal_images_in_display = closeFactor(c, horizontal_images_in_display_ideal)
+    vertical_images_in_display = n*c/horizontal_images_in_display 
+  if n == 1 and c == 3:
+    return Image.fromarray(dat,mode='F')
+  if n > 1 and c != 3:
+    horizontal_images_in_display_ideal = math.sqrt(n*c)
+    horizontal_images_in_display = closeCommonFactor(n*c, c, horizontal_images_in_display_ideal)
+    vertical_images_in_display = n*c/horizontal_images_in_display
+  if n > 1 and c == 3:
+    return tile_rgb_imgs(dat)
   print "Display dimensions in images: ({},{})".format(horizontal_images_in_display, vertical_images_in_display)
   dat = dat.transpose([0,3,1,2]) #n,c,y,x
 
@@ -77,7 +114,7 @@ def tile_imgs(dat):
                    :]
               imgs[:,(img+1)*(x+1)-1] = minval
       imgs[px_row+img_row*(y+1)+1,:] = minval
-  return imgs
+  return Image.fromarray(imgs, mode= 'F')
 
 
 

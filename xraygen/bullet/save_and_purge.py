@@ -36,8 +36,8 @@ def save(pre):
     bpy.ops.export_mesh.stl(\
         filepath="/home/jlovitt/git/workspace/xraygen/xray/stl/{}{:0>5}.stl".format(pre,gf.gen_num()),\
         check_existing=False, \
-        axis_forward='-Z', \
-        axis_up='-Y', \
+        #axis_forward='-Z', \
+        #axis_up='-Y', \
         filter_glob="*.stl", \
         global_scale=1.0, \
         use_scene_unit=False, \

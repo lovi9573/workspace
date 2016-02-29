@@ -108,8 +108,8 @@ class AddBox():
         objs = []
         for i in range(n):
             self.depth = random.uniform(lmin,lmax)
-            verts_loc, faces = add_box(0.25,
-                                       0.25,
+            verts_loc, faces = add_box(0.125,
+                                       0.125,
                                        self.depth,
                                        )
             name = "Fry{}-{:0>4}".format(gen_num(),i)

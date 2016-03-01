@@ -21,8 +21,10 @@ import weights_to_img as w2i
 class Object:
     pass
 
-N_COLUMNS = 1
+N_COLUMNS = 3
 N_STEPS = 1
+DEFAULT_PATIENCE=5
+DEFAULT_PATIENCE_DELTA=0.00001
 """
 Cifar Setup
 LAYERS = [
@@ -88,36 +90,60 @@ LAYERS = [
 #           {'Layerdef':FCLayerDef(1024),
 #            "Pretrain_epochs":-1,
 #            "Convergence_threshold":0.0},
-          {"Layerdef":ConvLayerDef(5,2,16,padding='SAME',tied_weights=False ),
+#1
+          {"Layerdef":ConvLayerDef(5,2,8,padding='SAME',tied_weights=False ),
               "Pretrain_epochs":0,
                "Patience": 5,
-               "Patience_delta": 0.00001,
-               "Convergence_threshold":0.0}, #out: 16
-#           {"Layerdef":ConvLayerDef(1,1,12,tied_weights=False),
-#                "Pretrain_epochs":-1,
-#                "Patience": 5,
-#                "Patience_delta": 0.01,
-#                "Convergence_threshold":0.0}, #out: 15
-          {"Layerdef":ConvLayerDef(5,2,128,padding='SAME',tied_weights=False),
+               "Patience_delta": DEFAULT_PATIENCE_DELTA,
+               "Convergence_threshold":0.0}, #out: 14
+#2
+          {"Layerdef":ConvLayerDef(5,2,32,padding='SAME',tied_weights=False),
                "Pretrain_epochs":0,
                "Patience": 5,
-               "Patience_delta": 0.00001,
-               "Convergence_threshold":0.0}, #out: 8
-          {"Layerdef":ConvLayerDef(3,1,256,tied_weights=False),
-               "Pretrain_epochs":-1,
+               "Patience_delta": DEFAULT_PATIENCE_DELTA,
+               "Convergence_threshold":0.0}, #out: 7
+#3
+          {"Layerdef":ConvLayerDef(1,1,24,tied_weights=False),
+               "Pretrain_epochs":0,
                "Patience": 5,
-               "Patience_delta": 0.00001,
-               "Convergence_threshold":0.0}, #out:6
-          {"Layerdef":ConvLayerDef(3,1,512,tied_weights=False),
-               "Pretrain_epochs":-1,
+               "Patience_delta": DEFAULT_PATIENCE_DELTA,
+               "Convergence_threshold":0.0}, #out: 7
+#4
+          {"Layerdef":ConvLayerDef(3,1,64,tied_weights=False),
+               "Pretrain_epochs":0,
                "Patience": 5,
-               "Patience_delta": 0.001,
-               "Convergence_threshold":0.0}, #out: 4
-          {'Layerdef':FCLayerDef(256,sparsity_target=0.02, sparsity_lr=0.3, activation_entropy_lr=0.1),
-           "Pretrain_epochs":-1,
+               "Patience_delta": DEFAULT_PATIENCE_DELTA,
+               "Convergence_threshold":0.0}, #out:5
+#5
+          {"Layerdef":ConvLayerDef(1,1,48,tied_weights=False),
+               "Pretrain_epochs":0,
+               "Patience": 5,
+               "Patience_delta": DEFAULT_PATIENCE_DELTA,
+               "Convergence_threshold":0.0}, #out: 5
+#6
+          {"Layerdef":ConvLayerDef(3,1,96,tied_weights=False),
+               "Pretrain_epochs":0,
+               "Patience": 5,
+               "Patience_delta": DEFAULT_PATIENCE_DELTA,
+               "Convergence_threshold":0.0}, #out: 3
+#7
+          {"Layerdef":ConvLayerDef(1,1,48,tied_weights=False),
+               "Pretrain_epochs":0,
+               "Patience": 5,
+               "Patience_delta": DEFAULT_PATIENCE_DELTA,
+               "Convergence_threshold":0.0}, #out: 3
+#8
+          {"Layerdef":ConvLayerDef(3,1,96,tied_weights=False),
+               "Pretrain_epochs":0,
+               "Patience": 5,
+               "Patience_delta": DEFAULT_PATIENCE_DELTA,
+               "Convergence_threshold":0.0}, #out: 1
+#9
+          {'Layerdef':FCLayerDef(8,sparsity_target=0.02, sparsity_lr=0.0 , activation_entropy_lr=0.0),
+           "Pretrain_epochs":0,
            "Patience": 5,
-           "Patience_delta": 0.001,
-           "Convergence_threshold":0.0},
+           "Patience_delta": DEFAULT_PATIENCE_DELTA,
+           "Convergence_threshold":0.95},
 #           {"Layerdef":ConvLayerDef(3,1,32,sparsity_target=0.03, sparsity_lr=0.1),
 #                "Pretrain_epochs":-1,
 #                "Patience": 5,
@@ -136,7 +162,7 @@ DATA_PARAM.batch_size = 256
 TRANSFORM_PARAM = Object()
 TRANSFORM_PARAM.mean_file = ""
 TRANSFORM_PARAM.mean_value = [127,127,127]
-TRANSFORM_PARAM.crop_size = 32
+TRANSFORM_PARAM.crop_size = 28
 TRANSFORM_PARAM.mirror = False
 NUM_LABELS = 10
 SHOW = False
@@ -236,10 +262,12 @@ def encode_even(imap, columns, keys, epochs, epoch_num):
 def save_recon(dp, columns):
     for n,column in columns.iteritems():
       d,r = column.recon(dp.get_mb().next()[0])
-      if r.shape[-1] == 1:
-        im = Image.fromarray(np.append(dp.denormalize(d[4]),dp.denormalize(r[4]),axis=0).astype(np.uint8).squeeze(),mode='L')
-      else:
-        im = Image.fromarray(np.append(dp.denormalize(d[4]),dp.denormalize(r[4]),axis=0).squeeze())
+      s = list(d.shape)
+      s[0] = s[0]*2
+      d_r_array = np.empty(s,dtype=d.dtype)
+      d_r_array[0::2,:,:,:] = d
+      d_r_array[1::2,:,:,:] = r
+      im = w2i.tile_imgs(d_r_array)
       im.save(IMG_DIR+'im_recon_col'+str(n)+'_level'+str(layer_number+1)+'.png')
       top_shape = column.top_shape()
       a = np.zeros(top_shape)
@@ -262,27 +290,22 @@ def save_top(dp, columns):
       t = column.fwd(dp.get_mb().next()[0])
       top_shape = column.top_shape()
       if len(top_shape) == 4:
-        tiled = w2i.tile_imgs(t)
-        mn = np.min(tiled)
-        mx = np.max(tiled)
-        tiled = ((tiled-mn)/(mx-mn)*256).astype(np.uint8)
-        im = Image.fromarray(tiled)
+        im = w2i.tile_imgs(t)
   #       im = Image.fromarray(dp.denormalize(c[0,:]).astype(np.uint8).squeeze(),mode='L')
         im.save(IMG_DIR+'col'+str(n)+'_level'+str(layer_number+1)+'_top.png')   
 
 def save_exemplars(dp, columns):
       for i in range(len(columns)):
-        print "Example for column {}".format(i)
-        key = None
+        keys = []
         map_iter = immap['key2col'].iterkeys()
         try:
-          while(key==None):
+          while len(keys) < 64:
             k = map_iter.next()
             if immap['key2col'][k] == i:
-              key = k
-          sample = dp.get_mb_by_keys([key])
-          plt.imshow(dp.denormalize(sample[0][0,:]))
-          plt.show()
+              keys.append(k)
+          sample = dp.get_mb_by_keys(keys)
+          im = w2i.tile_imgs(sample)
+          im.save(IMG_DIR+"col"+str(i)+"_exemplars.png")
         except StopIteration:
           pass
         #display(dp.denormalize(s.run(columns[i].layers[-1].W).transpose([3,0,1,2])))
@@ -314,12 +337,14 @@ if __name__ == '__main__':
       print "Usage: python dynamic_columns.py <path to data> [<>]"
       sys.exit(-1)
     DATA_PARAM.source = sys.argv[1:]
-    dp = CifarDataProvider(DATA_PARAM,TRANSFORM_PARAM )
+    dp = MnistDataProvider(DATA_PARAM,TRANSFORM_PARAM )
     imgkeys = dp.get_keys()
     columns = {}
-    with tf.Session() as s:
+    with tf.Session() as sess:
       for i in range(N_COLUMNS):
-        columns[i] = AutoEncoder(s,dp,LOG_DIR, CHECKPOINT_DIR)
+        g = tf.Graph()
+        s = tf.Session(graph=g)
+        columns[i] = AutoEncoder(s,g,dp,LOG_DIR, CHECKPOINT_DIR)
       print "Columns Initialized"
       
       #Iterate over layer definitions to build a column

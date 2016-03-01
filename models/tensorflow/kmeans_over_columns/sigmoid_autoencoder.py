@@ -12,7 +12,6 @@ from os import path
 import tensorflow.python.platform
 from google.protobuf.text_format import Merge
 import numpy
-from six.moves import urllib
 from six.moves import xrange  # pylint: disable=redefined-builtin
 import tensorflow as tf
 import math
@@ -45,8 +44,8 @@ class FCLayerDef(LayerDef):
     def indim(self):
         return self._indim
       
-    def instance(self):
-        return FCLayer()
+    def instance(self,g):
+        return FCLayer(g)
 
     def __str__(self):
       return "Fully Connected layer with output size {}".format(self._outdim)
@@ -74,8 +73,8 @@ class ConvLayerDef(LayerDef):
     def strides(self):
         return [1,self._stride,self._stride,1]
       
-    def instance(self):
-        return ConvLayer()
+    def instance(self, g):
+        return ConvLayer(g)
   
     def __str__(self):
       return "Convolutional layer {}x{}x{} stride {}".format(self._filterdim, self._filterdim,self._outdim,self._stride)
@@ -116,9 +115,10 @@ class Layer(object):
 
 class DataLayer(Layer):
     
-    def __init__(self,dp):
+    def __init__(self,dp,g):
         self.dp = dp
-        self.datalayer = tf.placeholder(tf.float32, dp.shape(), "data")
+        with g.as_default():
+          self.datalayer = tf.placeholder(tf.float32, dp.shape(), "data")
         self._recon = None
         self.next = None
         self._back = None
@@ -160,7 +160,8 @@ class DataLayer(Layer):
  
 class FeedThroughLayer(Layer):
     
-  def __init__(self):
+  def __init__(self,g):
+      self.g = g
       self._top = None
       self._recon = None
       self._back = None
@@ -244,9 +245,10 @@ class CorruptionLayer(FeedThroughLayer):
   noiselevel = 0.3
   
   def build(self):
-        '''
-        Constructs the computation graph for this layer and all subsequent layers.
-        '''
+      '''
+      Constructs the computation graph for this layer and all subsequent layers.
+      '''
+      with self.g.as_default():
         if self.prev and self.next and self.d and self.prev != self: 
           self._indim = self.prev.top().get_shape().as_list()
           inflat = reduce(mul,self._indim[1:])
@@ -271,9 +273,10 @@ class CorruptionLayer(FeedThroughLayer):
 class FCLayer(FeedThroughLayer): 
         
     def build(self):
-        '''
-        Constructs the computation graph for this layer and all subsequent layers.
-        '''
+      '''
+      Constructs the computation graph for this layer and all subsequent layers.
+      '''
+      with self.g.as_default():
         if self.prev and self.next and self.d and self.prev != self: 
           self._indim = self.prev.top().get_shape().as_list()
           inflat = reduce(mul,self._indim[1:])
@@ -314,7 +317,8 @@ class FCLayer(FeedThroughLayer):
         self.prev.build_back()
     
     def compute_back(self,top):
-      return tf.sigmoid(tf.add(tf.reshape(tf.matmul(top,tf.transpose(self.W)),self._indim),self.rev_bias))
+      with self.g.as_default():
+        return tf.sigmoid(tf.add(tf.reshape(tf.matmul(top,tf.transpose(self.W)),self._indim),self.rev_bias))
 
     def params(self):
       return [self.W, self.bias, self.rev_bias]
@@ -326,9 +330,10 @@ class ConvLayer(FeedThroughLayer):
 
         
     def build(self):
-        '''
-        Constructs the computation graph for this layer and all subsequent layers.
-        '''
+      '''
+      Constructs the computation graph for this layer and all subsequent layers.
+      '''
+      with self.g.as_default():
         if self.prev and self.next and self.d and self.prev != self: 
           indim = self.prev.top().get_shape().as_list()
           inflat = reduce(mul,indim[1:])
@@ -377,11 +382,12 @@ class ConvLayer(FeedThroughLayer):
         self.prev.build_back()
         
     def compute_back(self, top):
-      w = self.W
-      if not self.d._tied_weights:
-        w = self.rev_W
-      return tf.sigmoid(tf.nn.deconv2d(top, tf.transpose(w, [1,0,2,3] ), self.prev.top().get_shape().as_list(), self.d.strides(), padding=self.d._padding)+self.rev_bias)
-        
+      with self.g.as_default():
+        w = self.W
+        if not self.d._tied_weights:
+          w = self.rev_W
+        return tf.sigmoid(tf.nn.deconv2d(top, tf.transpose(w, [1,0,2,3] ), self.prev.top().get_shape().as_list(), self.d.strides(), padding=self.d._padding)+self.rev_bias)
+          
     def params(self):
       ret =  [self.W,self.bias, self.rev_bias]
       if not self.d._tied_weights:
@@ -432,11 +438,12 @@ def entropy(a):
 
 class AutoEncoder(object):
     
-    def __init__(self,s, dp, log_path, checkpoint_path):
+    def __init__(self,s,g, dp, log_path, checkpoint_path):
         self.dp = dp
         self.s = s
+        self.g = g
         self.layer_number = 0
-        self.layers = [DataLayer(self.dp)]
+        self.layers = [DataLayer(self.dp,g)]
         self.bottom_feed = self.layers[0].bottom_feed()
         self.LEARNING_RATE=0.9
         self.alpha = 0.0
@@ -458,114 +465,118 @@ class AutoEncoder(object):
       return a+b
     
     def save(self):
-      parameterlayers = self.layers
-      if self.freeze:
-        parameterlayers = [self.layers[-1]]
-      params = [w for l in parameterlayers for w in l.params()]
-      if len(params) == 0:
-        return 
-      saver = tf.train.Saver(params)
-      saver.save(self.s,path.join(self.checkpoint_path,'layer'+str(self.layer_number)))
+      with self.g.as_default():
+        parameterlayers = self.layers
+        if self.freeze:
+          parameterlayers = [self.layers[-1]]
+        params = [w for l in parameterlayers for w in l.params()]
+        if len(params) == 0:
+          return 
+        saver = tf.train.Saver(params)
+        saver.save(self.s,path.join(self.checkpoint_path,'layer'+str(self.layer_number)))
      
     def restore(self):
-      parameterlayers = self.layers
-      if self.freeze:
-        parameterlayers = [self.layers[-1]]
-      params = [w for l in parameterlayers for w in l.params()]
-      if len(params) == 0:
-        return 
-      saver = tf.train.Saver(params)
-      saver.restore(self.s,path.join(self.checkpoint_path,'layer'+str(self.layer_number)))
-      print(", ".join(map(str,parameterlayers)) + " Restored from checkpoint")
+      with self.g.as_default():
+        parameterlayers = self.layers
+        if self.freeze:
+          parameterlayers = [self.layers[-1]]
+        params = [w for l in parameterlayers for w in l.params()]
+        if len(params) == 0:
+          return 
+        paramsdict = {w.name.strip(":[0..9]+"):w for w in params}
+        saver = tf.train.Saver(params)
+        saver.restore(self.s,path.join(self.checkpoint_path,'layer'+str(self.layer_number)))
+        print(", ".join(map(str,parameterlayers)) + " Restored from checkpoint")
    
     def add_layer(self,definition):
-      self.save()
-      #Get hyperparameters
-      self.layer_number+=1
-      
-      #Insert into stack
-      l = definition.instance()
-      l.set_params(definition, self.layer_number)
-      l.set_next(l)
-      self.layers[-1].set_next(l)
-      self.layers.append(l)
-      l.build()
-      
-      #Reference new layer inputs/outputs
-      self._top = self.layers[-1].top()
-      self.injection = tf.placeholder(tf.float32, self._top.get_shape().as_list(), "top_data_injection")
-      l.inject(self.injection)
-      self._recon = self.layers[0].recon()
-      depth = 1 #min(len(self.layers)-1,10)
-      self._rep_recon = self.layers[-depth].recon()
-      self._rep_ground_truth = (self.layers[-depth]).prev.truth()
-      self._back = self.layers[0].back()
-      tf.histogram_summary("representation_at_top"+str(self.layer_number), self._rep_ground_truth)
-      
-      #Build loss and optimization functions
-      self._individual_reconstruction_loss = tf.reduce_mean(
-                                                            -self.cross_entropy(
-                                                                                self._rep_ground_truth ,
-                                                                                self._rep_recon),
-                                                            reduction_indices=range(
-                                                                                    1,
-                                                                                    self._rep_recon.get_shape().ndims) 
-                                                            )
-      reconstruction_loss = tf.reduce_mean(
-                                           -self.cross_entropy(
-                                                               self._rep_ground_truth ,
-                                                               self._rep_recon))
-      self._loss = reconstruction_loss
-      tf.scalar_summary("reconstruction_loss"+str(self.layer_number),reconstruction_loss)
-      #Sparsity
-      per_channel_mean_activation = tf.reduce_mean(
-                                                   self._top,
-                                                   reduction_indices=range(l.top().get_shape().ndims-1)
-                                                   )
-      tf.histogram_summary("per_channel_mean_activation"+str(self.layer_number) , per_channel_mean_activation)
-      if definition.sparsity_lr > 0.0:
-        sparsity_loss = tf.reduce_mean(
-                                       -self.cross_entropy(
-                                                           definition.sparsity_target,
-                                                           per_channel_mean_activation
-                                                          )
-                                      )
-        self._loss += definition.sparsity_lr*sparsity_loss
-        tf.scalar_summary("sparsity_loss"+str(self.layer_number), definition.sparsity_lr*sparsity_loss)
+      with self.g.as_default():
+        self.save()
+        #Get hyperparameters
+        self.layer_number+=1
         
-      #Activation Entropy
-      per_channel_activation_entropy = tf.reduce_mean(entropy(self._top),reduction_indices=range(l.top().get_shape().ndims-1))
-      tf.histogram_summary("per_channel_activation_entropy_loss"+str(self.layer_number), per_channel_activation_entropy)
-      if definition.activation_entropy_lr > 0.0:
-        entropy_loss = definition.activation_entropy_lr*tf.reduce_mean(per_channel_activation_entropy)
-        self._loss += entropy_loss
-        tf.scalar_summary("activation_entropy_loss"+str(self.layer_number), entropy_loss)
-      #Active parameter selection
-      parameterlayers = [self.layers[-1]]
-      if not self.freeze:
-        parameterlayers = self.layers
-      layerparams = [w for l in parameterlayers for w in l.params()]
-      #Weight Decay
-      if self.alpha >0 and len(layerparams) > 0:
-        weightsmagnitude = [tf.reduce_sum(tf.pow(w,2)) for l in self.layers for w in l.params()]
-        paramsize = reduce(add,[reduce(mul,w.get_shape().as_list())  for l in self.layers for w in l.params() ])
-        weight_decay = reduce(add,weightsmagnitude)/paramsize
-        self._loss += self.alpha*weight_decay
-      # Optimization
-      if len(layerparams) > 0:
-        self.optimizer = tf.train.MomentumOptimizer(self.LEARNING_RATE,0.9,use_locking=True)
-        self.optimizer_objective = self.optimizer.minimize(self._loss, var_list=layerparams)
-        self.writer = tf.train.SummaryWriter(self.log_path,self.s.graph_def)
-        summarylist = [tf.histogram_summary(str(self.layer_number)+"_"+str(i),p) for i,p in enumerate(layerparams)]
-        self. summaries = tf.merge_all_summaries()
-        initparams = [self.optimizer.get_slot(v,n) for v in layerparams for n in self.optimizer.get_slot_names()]
-      #Restore from checkpoint or Initialize new Variables
-      if path.isfile(path.join(self.checkpoint_path,'layer'+str(self.layer_number))):
-        self.restore()
-      else:
-        tf.initialize_variables(layerparams).run()
-      tf.initialize_variables(initparams).run()
-#       tf.train.SummaryWriter.add_graph(self.s.graph_def, self.layer_number)
+        #Insert into stack
+        l = definition.instance(self.g)
+        l.set_params(definition, self.layer_number)
+        l.set_next(l)
+        self.layers[-1].set_next(l)
+        self.layers.append(l)
+        l.build()
+        
+        #Reference new layer inputs/outputs
+        self._top = self.layers[-1].top()
+        self.injection = tf.placeholder(tf.float32, self._top.get_shape().as_list(), "top_data_injection")
+        l.inject(self.injection)
+        self._recon = self.layers[0].recon()
+        depth = 1 #min(len(self.layers)-1,10)
+        self._rep_recon = self.layers[-depth].recon()
+        self._rep_ground_truth = (self.layers[-depth]).prev.truth()
+        self._back = self.layers[0].back()
+        tf.histogram_summary("representation_at_top"+str(self.layer_number), self._rep_ground_truth)
+        
+        #Build loss and optimization functions
+        self._individual_reconstruction_loss = tf.reduce_mean(
+                                                              -self.cross_entropy(
+                                                                                  self._rep_ground_truth ,
+                                                                                  self._rep_recon),
+                                                              reduction_indices=range(
+                                                                                      1,
+                                                                                      self._rep_recon.get_shape().ndims) 
+                                                              )
+        reconstruction_loss = tf.reduce_mean(
+                                             -self.cross_entropy(
+                                                                 self._rep_ground_truth ,
+                                                                 self._rep_recon))
+        self._loss = reconstruction_loss
+        tf.scalar_summary("reconstruction_loss"+str(self.layer_number),reconstruction_loss)
+        #Sparsity
+        per_channel_mean_activation = tf.reduce_mean(
+                                                     self._top,
+                                                     reduction_indices=range(l.top().get_shape().ndims-1)
+                                                     )
+        tf.histogram_summary("per_channel_mean_activation"+str(self.layer_number) , per_channel_mean_activation)
+        if definition.sparsity_lr > 0.0:
+          sparsity_loss = tf.reduce_mean(
+                                         -self.cross_entropy(
+                                                             definition.sparsity_target,
+                                                             per_channel_mean_activation
+                                                            )
+                                        )
+          self._loss += definition.sparsity_lr*sparsity_loss
+          tf.scalar_summary("sparsity_loss"+str(self.layer_number), definition.sparsity_lr*sparsity_loss)
+          
+        #Activation Entropy
+        per_channel_activation_entropy = tf.reduce_mean(entropy(self._top),reduction_indices=range(l.top().get_shape().ndims-1))
+        tf.histogram_summary("per_channel_activation_entropy_loss"+str(self.layer_number), per_channel_activation_entropy)
+        if definition.activation_entropy_lr > 0.0:
+          entropy_loss = definition.activation_entropy_lr*tf.reduce_mean(per_channel_activation_entropy)
+          self._loss += entropy_loss
+          tf.scalar_summary("activation_entropy_loss"+str(self.layer_number), entropy_loss)
+        #Active parameter selection
+        parameterlayers = [self.layers[-1]]
+        if not self.freeze:
+          parameterlayers = self.layers
+        layerparams = [w for l in parameterlayers for w in l.params()]
+        #Weight Decay
+        if self.alpha >0 and len(layerparams) > 0:
+          weightsmagnitude = [tf.reduce_sum(tf.pow(w,2)) for l in self.layers for w in l.params()]
+          paramsize = reduce(add,[reduce(mul,w.get_shape().as_list())  for l in self.layers for w in l.params() ])
+          weight_decay = reduce(add,weightsmagnitude)/paramsize
+          self._loss += self.alpha*weight_decay
+        # Optimization
+        if len(layerparams) > 0:
+          self.optimizer = tf.train.MomentumOptimizer(self.LEARNING_RATE,0.9,use_locking=True)
+          self.optimizer_objective = self.optimizer.minimize(self._loss, var_list=layerparams)
+          self.writer = tf.train.SummaryWriter(self.log_path,self.s.graph_def)
+          summarylist = [tf.histogram_summary(str(self.layer_number)+"_"+str(i),p) for i,p in enumerate(layerparams)]
+          self. summaries = tf.merge_all_summaries()
+          initparams = [self.optimizer.get_slot(v,n) for v in layerparams for n in self.optimizer.get_slot_names()]
+        #Restore from checkpoint or Initialize new Variables
+        if path.isfile(path.join(self.checkpoint_path,'layer'+str(self.layer_number))):
+          self.restore()
+        else:
+          tf.initialize_variables(layerparams).run(session=self.s)
+        tf.initialize_variables(initparams).run(session=self.s)
+  #       tf.train.SummaryWriter.add_graph(self.s.graph_def, self.layer_number)
   
     def top_shape(self):
       return self.injection.get_shape().as_list()

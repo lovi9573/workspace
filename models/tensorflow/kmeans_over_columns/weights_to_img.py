@@ -82,26 +82,26 @@ def tile_imgs(dat, normalize=False):
   n,y,x,c = dat.shape
   minval = np.min(dat)
   maxval = np.max(dat)
-  if normalize:
-    dat = (dat - minval)/(maxval-minval)
-  print "max: {} min: {}\n".format(maxval,minval)
+  dat = (dat - minval)/(maxval-minval)*255
+  dat = dat.astype(np.uint8)
+#   print "max: {} min: {}\n".format(maxval,minval)
   
   if n == 1 and c != 3:
     horizontal_images_in_display_ideal = math.sqrt(n*c)
     horizontal_images_in_display = closeFactor(c, horizontal_images_in_display_ideal)
     vertical_images_in_display = n*c/horizontal_images_in_display 
   if n == 1 and c == 3:
-    return Image.fromarray(dat,mode='F')
+    return Image.fromarray(dat)
   if n > 1 and c != 3:
     horizontal_images_in_display_ideal = math.sqrt(n*c)
     horizontal_images_in_display = closeCommonFactor(n*c, c, horizontal_images_in_display_ideal)
     vertical_images_in_display = n*c/horizontal_images_in_display
   if n > 1 and c == 3:
     return tile_rgb_imgs(dat)
-  print "Display dimensions in images: ({},{})".format(horizontal_images_in_display, vertical_images_in_display)
+#   print "Display dimensions in images: ({},{})".format(horizontal_images_in_display, vertical_images_in_display)
   dat = dat.transpose([0,3,1,2]) #n,c,y,x
 
-  imgs = np.ndarray([vertical_images_in_display*(y+1),horizontal_images_in_display*(x+1)],dtype=np.float32)
+  imgs = np.ndarray([vertical_images_in_display*(y+1),horizontal_images_in_display*(x+1)],dtype=np.uint8)
   imgs[:,:] = 0.0
   for img_row in range(vertical_images_in_display):
       for px_row in range(y):
@@ -114,7 +114,7 @@ def tile_imgs(dat, normalize=False):
                    :]
               imgs[:,(img+1)*(x+1)-1] = minval
       imgs[px_row+img_row*(y+1)+1,:] = minval
-  return Image.fromarray(imgs, mode= 'F')
+  return Image.fromarray(imgs,mode = 'L')
 
 
 

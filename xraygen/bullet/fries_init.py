@@ -9,14 +9,14 @@ import imp
 imp.reload(gf)
 imp.reload(sp)
 
-N_IMAGES = 5
+N_IMAGES = 1
 N_STEPS = 225
-N_FRIES = 512
+N_FRIES = 2048
 PHYSICS_FREQ = 100
 PHYSICS_SOLVER_ITER = 10
 FILE_PREFIX = 'generated_short'
-LENGTH_MIN = 0.9
-LENGTH_MAX = 1.0
+LENGTH_MIN = 4.0
+LENGTH_MAX = 5.0
 
 if __name__ == "__main__":
     bpy.ops.object.select_all(action='DESELECT')
@@ -44,4 +44,5 @@ if __name__ == "__main__":
                 print("\tTime Step {}".format(i))
         sp.save(FILE_PREFIX)
         sp.remove_fries()
+    print("Complete!")
 

@@ -11,12 +11,12 @@ imp.reload(sp)
 
 N_IMAGES = 1
 N_STEPS = 225
-N_FRIES = 2048
+N_FRIES = 512
 PHYSICS_FREQ = 100
 PHYSICS_SOLVER_ITER = 10
 FILE_PREFIX = 'generated_short'
-LENGTH_MIN = 4.0
-LENGTH_MAX = 5.0
+LENGTH_MIN = 1.0
+LENGTH_MAX = 3.0
 
 if __name__ == "__main__":
     bpy.ops.object.select_all(action='DESELECT')

@@ -141,7 +141,7 @@ class AddBox():
             obj.location[:] = \
                   random.uniform(-self.LOCATION_RANGE,self.LOCATION_RANGE), \
                   random.uniform(-self.LOCATION_RANGE,self.LOCATION_RANGE), \
-                  random.uniform(-self.LOCATION_RANGE,self.LOCATION_RANGE)
+                  random.uniform(self.LOCATION_RANGE,3*self.LOCATION_RANGE)
         t.time('transform')
         fry_group = bpy.data.groups['Fries-Auto']
         for obj in objs:               

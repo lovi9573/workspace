@@ -175,116 +175,57 @@ namespace fs = boost::filesystem;
 //******************************************************************************
 //	Constant variables
 //******************************************************************************
-const GLfloat g_rotation_speed(2.0);
 
-const int NONE(0);
-const int SCENE(1);
-const int OBJECT(2);
-const int DETECTOR(3);
 
-const double g_initial_intraocular_distance(1.5 * cm);        // Intraocular distance
-const double g_initial_fovy(45);                              // Field of view along the y-axis
-const double g_initial_near(-10.0 * cm);                        // Near clipping plane (default: 5.0)
-const double g_initial_far(500.0 * cm);                       // Far clipping plane
-const double g_initial_screen_projection_plane(10000.0 * cm); // Screen projection plane
 
 
 //******************************************************************************
 //	Global variables
 //******************************************************************************
-GLsizei g_current_main_window_width(600);
-GLsizei g_current_main_window_height(600);
-GLsizei g_original_main_window_width(g_current_main_window_width);
-GLsizei g_original_main_window_height(g_current_main_window_height);
-GLFWwindow* g_p_main_window_id(0);
-
-int g_button(-1);
-int g_button_state(-1);
-bool g_use_arc_ball(false);
-GLint g_last_x_position(0);
-GLint g_last_y_position(0);
-GLint g_current_x_position(0);
-GLint g_current_y_position(0);
-
-bool g_display_beam(true);
-
-Matrix4x4<GLfloat> g_scene_rotation_matrix;
-Matrix4x4<GLfloat> g_detector_rotation_matrix;
-Matrix4x4<GLfloat> g_sample_rotation_matrix;
-Matrix4x4<GLfloat> g_text_2D_projection_matrix;
 
 GLfloat g_incident_energy(20.0 * keV);  //(default: 80.0 keV)
-VEC2 g_detector_size(30.0 * cm, 30.0 * cm);
-Vec2ui g_number_of_pixels(2048, 2048);
-GLfloat g_resolution(g_detector_size.getX() / g_number_of_pixels.getX());
+float resolution = 72.0/cm;
+VEC2 g_detector_size(28.0 * cm, 24.0 * cm);
 
-VEC3 g_source_position(   0.0, 0.0, -40.0 * cm);
-VEC3 g_detector_position( 0.0, 0.0,  20.0 * cm);  //(default:10.0)
+VEC3 g_source_position(   0.0, 0.0, 40.0 * cm);
+VEC3 g_detector_position( 0.0, 0.0,  -1.0 * cm);  //(default:10.0)
 VEC3 g_detector_up_vector(0.0, 1.0,   0.0);
-const VEC3 g_background_colour(0.5, 0.5, 0.5);
 
-PolygonMesh g_polygon_data;
+
+
+
+
+bool g_is_xray_image_up_to_date(false);
+
+
+//******************************************************************************
+//	Global init
+//******************************************************************************
+unsigned int pxx = static_cast<unsigned int>(resolution*g_detector_size.getX());
+unsigned int pxy = static_cast<unsigned int>(resolution*g_detector_size.getY());
+Vec2ui g_number_of_pixels(pxx, pxy);
+GLfloat g_resolution(g_detector_size.getX() / g_number_of_pixels.getX());
 
 XRayBeam g_xray_beam;
 XRayDetector g_xray_detector;
 XRayRenderer g_xray_renderer;
-Shader g_display_shader;
 
-StereoHelper g_stereo_helper;
+GLFWwindow* g_p_main_window_id(0);
 
-bool g_is_xray_image_up_to_date(false);
-int g_rotation_mode(SCENE);
-bool g_display_wireframe(false);
-
-bool g_use_lighing(true);
-bool g_display_detector(true);
-
-
-clock_t g_start(0);
-int g_image_computed(0);
-double g_number_of_seconds(0);
-double g_fps(0);
-bool g_use_fullscreen(true);
-
-#ifdef HAS_FREETYPE
-bool g_display_help(true);
-TextRenderer g_font_rendered;
-#endif
-
-bool g_use_left_shift_key(false);
-bool g_use_right_shift_key(false);
-
+Matrix4x4<GLfloat> g_scene_rotation_matrix;
+Matrix4x4<GLfloat> g_detector_rotation_matrix;
+Matrix4x4<GLfloat> g_sample_rotation_matrix;
 
 //******************************************************************************
 //	Function declaration
 //******************************************************************************
-//void display();
-//void initGLEW();
-//void initGL();
-//void initFreeType();
-//void framebufferSizeCallback(GLFWwindow* apWindow, int aWidth, int aHeight);
-//void keyCallback(GLFWwindow* apWindow, int aKey, int aScanCode, int anAction, int aModifierKey);
-//void mouseButtonCallback(GLFWwindow* apWindow, int aButton, int aButtonState, int aModifierKey);
-//void cursorPosCallback(GLFWwindow* apWindow, double x, double y);
-//void scrollCallback(GLFWwindow* apWindow, double xoffset, double yoffset);
 void errorCallback(int error, const char* description);
 void quit();
-//void idle();
-
-//void computeRotation(MATRIX4& aRotationMatrix);
 void loadDetector();
 void loadSource();
 void loadXRaySimulator();
-void loadSTLFile(const std::string& aPrefix);
+void loadSTLFile(const std::string& aPrefix, PolygonMesh&, double);
 void updateXRayImage(const std::string& fname);
-//void render();
-//void draw();
-//void drawMono();
-//void drawStereo();
-//void setCurrentEye();
-//Vec3<GLfloat> getArcballVector(int x, int y);
-//void displayHelp();
-
 
 //-----------------------------
 int main(int argc, char** argv)
@@ -324,7 +265,7 @@ int main(int argc, char** argv)
 
 		//TODO(Jesse Lovitt): Figure out how to make a non-window GL context to use for rendering an image.
 	    // Create a windowed mode window and its OpenGL context
-	    g_p_main_window_id = glfwCreateWindow(g_current_main_window_width, g_current_main_window_height, window_title.str().data(), NULL, NULL);
+	    g_p_main_window_id = glfwCreateWindow(1, 1, window_title.str().data(), NULL, NULL);
 
         // Window cannot be created 
         if (!g_p_main_window_id)
@@ -333,7 +274,7 @@ int main(int argc, char** argv)
             glfwWindowHint(GLFW_STEREO, GL_FALSE);
 
             // Create the window
-	        g_p_main_window_id = glfwCreateWindow(g_current_main_window_width, g_current_main_window_height, window_title.str().data(), NULL, NULL);
+	        g_p_main_window_id = glfwCreateWindow(1, 1, window_title.str().data(), NULL, NULL);
         }
         
         // Window cannot be created 
@@ -357,6 +298,8 @@ int main(int argc, char** argv)
 		checkOpenGLErrorStatus(__FILE__, __FUNCTION__, __LINE__);
 
 		// Add the geometry to the X-ray renderer
+		std::vector<PolygonMesh> polymeshes();
+
 		fs::path p(argv[1]);
 		fs::path output_prefix(argv[2]);
 	    if(!exists(p) || !is_directory(p)) {
@@ -366,29 +309,24 @@ int main(int argc, char** argv)
 		fs::directory_iterator begin(p), end;
 	    std::vector<fs::directory_entry> v(begin, end);
 	    for(std::vector<fs::directory_entry>::iterator it = v.begin(); it != v.end(); ++it){
-	    	std::cout << v.size()<< "here\n";
-	        std::cout << "Processsing: "<< (*it).path().native() << '\n';
-
-        	loadSTLFile((*it).path().native());
-        	checkOpenGLErrorStatus(__FILE__, __FUNCTION__, __LINE__);
-
-        	g_xray_renderer.addInnerSurface(&g_polygon_data);
-
-			// Rotate the sample
-//			g_sample_rotation_matrix.rotate( 90, VEC3(1, 0, 0));
-//			g_sample_rotation_matrix.rotate( 90, VEC3(0, 1, 0));
-
-			// Rotate the scene
-//			g_scene_rotation_matrix.rotate(-170, VEC3(0, 1, 0));
-
-			// Update the X-ray image
-			fs::path out = output_prefix;
-			out /= (*it).path().stem();
-			out.replace_extension(".png");
-			std::cout <<"Saving to: "<< out << '\n';
-			updateXRayImage(out.native());
-
-			g_xray_renderer.removeInnerSurfaces();
+	    	if ((*it).status().type() == fs::directory_file ){
+	    		std::cout << "Processsing: "<< (*it).path().native() << '\n';
+	    		fs::directory_iterator stlbegin((*it).path().native()), stlend;
+	    	    std::vector<fs::directory_entry> currentvec(stlbegin, stlend);
+	    	    for(std::vector<fs::directory_entry>::iterator stl = currentvec.begin(); stl != currentvec.end(); ++stl){
+					PolygonMesh* mesh = new PolygonMesh();
+	    	    	loadSTLFile((*stl).path().native(), *mesh, 0.0);
+					checkOpenGLErrorStatus(__FILE__, __FUNCTION__, __LINE__);
+					g_xray_renderer.addInnerSurface(mesh);
+	    	    }
+				// Update the X-ray image
+				fs::path out = output_prefix;
+				out /= (*it).path().stem();
+				out.replace_extension(".png");
+				std::cout <<"Saving to: "<< out << '\n';
+				updateXRayImage(out.native());
+				g_xray_renderer.removeInnerSurfaces();
+	    	}
 	    }
 
 	}
@@ -426,7 +364,7 @@ void quit()
 
 
 //------------------------------------------
-void loadSTLFile(const std::string& fname)
+void loadSTLFile(const std::string& fname, PolygonMesh& mesh, double hounsfieldval)
 //------------------------------------------
 {
 	std::string stl_filename(fname);
@@ -446,11 +384,11 @@ void loadSTLFile(const std::string& fname)
 	}
 
    	// Set geometry
-	g_polygon_data.setFilename(stl_filename.data());
-	g_polygon_data.loadSTLFile(true, true, true, true, mm, GL_STATIC_DRAW);
-	g_polygon_data.mergeVertices(true);
-	g_polygon_data.setHounsfieldValue(0.0);
-	g_polygon_data.applyScale(3.0);
+	mesh.setFilename(stl_filename.data());
+	mesh.loadSTLFile(false, true, true, true, cm, GL_STATIC_DRAW);
+	mesh.mergeVertices(true);
+	mesh.setHounsfieldValue(hounsfieldval);
+//	mesh.applyScale(3.0);
 
 	// The X-ray image is not up-to-date
 	g_is_xray_image_up_to_date = false;
@@ -479,10 +417,10 @@ void loadSource()
 	g_xray_beam.initialise(g_incident_energy);
 
 	// Set the source position
-	g_xray_detector.setXrayPointSource(g_source_position);
+//	g_xray_detector.setXrayPointSource(g_source_position);
 	//g_xray_detector.setParallelBeam();
-	g_xray_detector.setPointSource();
-	//g_xray_detector.setSquareSource(g_source_position, 2, 0.1 *cm);
+//	g_xray_detector.setPointSource();
+	g_xray_detector.setSquareSource(g_source_position, 8, 0.6 *cm);
 
 	// The X-ray image is not up-to-date
 	g_is_xray_image_up_to_date = false;

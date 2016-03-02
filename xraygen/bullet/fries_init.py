@@ -14,9 +14,10 @@ N_STEPS = 225
 N_FRIES = 512
 PHYSICS_FREQ = 100
 PHYSICS_SOLVER_ITER = 10
-FILE_PREFIX = 'generated_short'
-LENGTH_MIN = 1.0
-LENGTH_MAX = 3.0
+SAVE_PATH = "/home/jlovitt/git/workspace/xraygen/xray/stl/"
+FILE_PREFIX = 'generated'
+LENGTH_MIN = 2.5
+LENGTH_MAX = 5.0
 
 if __name__ == "__main__":
     bpy.ops.object.select_all(action='DESELECT')
@@ -42,7 +43,7 @@ if __name__ == "__main__":
             bpy.context.scene.frame_set(bpy.context.scene.frame_current + 1)
             if i %100 ==0:
                 print("\tTime Step {}".format(i))
-        sp.save(FILE_PREFIX)
+        sp.save(SAVE_PATH,FILE_PREFIX)
         sp.remove_fries()
     print("Complete!")
 

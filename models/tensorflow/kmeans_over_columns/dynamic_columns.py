@@ -21,7 +21,7 @@ import weights_to_img as w2i
 class Object:
     pass
 
-N_COLUMNS = 3
+N_COLUMNS = 4
 N_STEPS = 1
 DEFAULT_PATIENCE=5
 DEFAULT_PATIENCE_DELTA=0.00001
@@ -139,11 +139,11 @@ LAYERS = [
                "Patience_delta": DEFAULT_PATIENCE_DELTA,
                "Convergence_threshold":0.0}, #out: 1
 #9
-          {'Layerdef':FCLayerDef(8,sparsity_target=0.02, sparsity_lr=0.0 , activation_entropy_lr=0.0),
-           "Pretrain_epochs":0,
+          {'Layerdef':FCLayerDef(16,sparsity_target=0.02, sparsity_lr=0.0 , activation_entropy_lr=0.0),
+           "Pretrain_epochs":20,
            "Patience": 5,
            "Patience_delta": DEFAULT_PATIENCE_DELTA,
-           "Convergence_threshold":0.95},
+           "Convergence_threshold":0.99},
 #           {"Layerdef":ConvLayerDef(3,1,32,sparsity_target=0.03, sparsity_lr=0.1),
 #                "Pretrain_epochs":-1,
 #                "Patience": 5,

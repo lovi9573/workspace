@@ -7,6 +7,8 @@ import generate_fries as gf
 #import bge
 import time
 import imp
+from os import path
+import os
 imp.reload(gf)
 
 
@@ -30,20 +32,37 @@ def get_max_keyframe(obj_list):
     return max_keyframe
 
 
-def save(pre):
-    #bpy.ops.object.select_all(action='SELECT')
+def save(save_path,pre):
+    save_dir = path.join(save_path,"{}{:0>5}".format(pre,gf.gen_num()))
+    if not path.exists(save_dir):
+        os.makedirs(save_dir)
+    group = bpy.data.groups["Fries-Auto"]
+    for i,obj in enumerate(group.objects):
+        bpy.ops.object.select_all(action='DESELECT')
+        obj.select= True
+        bpy.ops.export_mesh.stl(\
+            filepath=path.join(save_dir,"fry{:0>5}.stl".format(i)),\
+            check_existing=False, \
+            #axis_forward='-Z', \
+            #axis_up='-Y', \
+            filter_glob="*.stl", \
+            global_scale=1.0, \
+            use_scene_unit=False, \
+            ascii=False, \
+            use_mesh_modifiers=True\
+        )
     select_fries()
     bpy.ops.export_mesh.stl(\
-        filepath="/home/jlovitt/git/workspace/xraygen/xray/stl/{}{:0>5}.stl".format(pre,gf.gen_num()),\
-        check_existing=False, \
-        #axis_forward='-Z', \
-        #axis_up='-Y', \
-        filter_glob="*.stl", \
-        global_scale=1.0, \
-        use_scene_unit=False, \
-        ascii=False, \
-        use_mesh_modifiers=True\
-    )
+            filepath=path.join(save_dir,"..","{}{}.stl".format(pre,gf.gen_num())),\
+            check_existing=False, \
+            #axis_forward='-Z', \
+            #axis_up='-Y', \
+            filter_glob="*.stl", \
+            global_scale=1.0, \
+            use_scene_unit=False, \
+            ascii=False, \
+            use_mesh_modifiers=True\
+        )
 
 def remove_fries():
     select_fries()

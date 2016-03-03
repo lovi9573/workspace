@@ -80,6 +80,12 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdlib.h>
 #include <ctime>
 
+#include "config.pb.h"
+#include <google/protobuf/text_format.h>
+#include <google/protobuf/io/zero_copy_stream_impl.h>
+#include <fstream>
+#include <fcntl.h>
+
 #ifdef HAS_BUNDLE
 #include <boost/filesystem.hpp>
 #endif
@@ -168,8 +174,6 @@ namespace fs = boost::filesystem;
 //******************************************************************************
 //	Defines
 //******************************************************************************
-#define PREFIX ".."
-#define OUTDIR "output/"
 
 
 //******************************************************************************
@@ -183,13 +187,7 @@ namespace fs = boost::filesystem;
 //	Global variables
 //******************************************************************************
 
-GLfloat g_incident_energy(20.0 * keV);  //(default: 80.0 keV)
-float resolution = 72.0/cm;
-VEC2 g_detector_size(28.0 * cm, 24.0 * cm);
 
-VEC3 g_source_position(   0.0, 0.0, 40.0 * cm);
-VEC3 g_detector_position( 0.0, 0.0,  -1.0 * cm);  //(default:10.0)
-VEC3 g_detector_up_vector(0.0, 1.0,   0.0);
 
 
 
@@ -201,10 +199,7 @@ bool g_is_xray_image_up_to_date(false);
 //******************************************************************************
 //	Global init
 //******************************************************************************
-unsigned int pxx = static_cast<unsigned int>(resolution*g_detector_size.getX());
-unsigned int pxy = static_cast<unsigned int>(resolution*g_detector_size.getY());
-Vec2ui g_number_of_pixels(pxx, pxy);
-GLfloat g_resolution(g_detector_size.getX() / g_number_of_pixels.getX());
+
 
 XRayBeam g_xray_beam;
 XRayDetector g_xray_detector;
@@ -221,18 +216,15 @@ Matrix4x4<GLfloat> g_sample_rotation_matrix;
 //******************************************************************************
 void errorCallback(int error, const char* description);
 void quit();
-void loadDetector();
-void loadSource();
+void loadDetector(xray::XRayConfig&);
+void loadSource(xray::XRayConfig&);
 void loadXRaySimulator();
 void loadSTLFile(const std::string& aPrefix, PolygonMesh&, double);
 void updateXRayImage(const std::string& fname);
 
-//-----------------------------
-int main(int argc, char** argv)
-//-----------------------------
-{
-    try
-    {
+
+void initGL(){
+
 	    // Set an error callback
 	    glfwSetErrorCallback(errorCallback);
 
@@ -286,12 +278,42 @@ int main(int argc, char** argv)
 
 	    // Make the window's context current
 	    glfwMakeContextCurrent(g_p_main_window_id);
+}
+
+//-----------------------------
+int main(int argc, char** argv)
+//-----------------------------
+{
+    try
+    {
+    	initGL();
+
+    	if (argc != 2){
+    		std::cout<< "Use: expose <path to config.prototxt>\n";
+    		exit(1);
+    	}
+    	xray::Config config;
+    	int fin = open(argv[1], O_RDONLY);
+    	google::protobuf::io::FileInputStream config_fin(fin);
+    	google::protobuf::TextFormat::Parse(&config_fin, &config);
+    	xray::XRayConfig xrayconfig = config.xrayconfig();
+
+//    	double dunit = 1.0;
+//    	switch (xrayconfig.distance_unit()){
+//    	case xray::DistanceUnit::mm:
+//    		dunit = mm;
+//    		break;
+//    	case xray::DistanceUnit::cm:
+//    		dunit = cm;
+//    		break;
+//    	}
+
 
 		// Load the data
-		loadDetector();
+		loadDetector(xrayconfig);
 		checkOpenGLErrorStatus(__FILE__, __FUNCTION__, __LINE__);
 
-		loadSource();
+		loadSource(xrayconfig);
 		checkOpenGLErrorStatus(__FILE__, __FUNCTION__, __LINE__);
 
 		loadXRaySimulator();
@@ -300,8 +322,8 @@ int main(int argc, char** argv)
 		// Add the geometry to the X-ray renderer
 		std::vector<PolygonMesh> polymeshes();
 
-		fs::path p(argv[1]);
-		fs::path output_prefix(argv[2]);
+		fs::path p(xrayconfig.input_path());
+		fs::path output_prefix(xrayconfig.output_path());
 	    if(!exists(p) || !is_directory(p)) {
 	        std::cout << p << " is not a valid path\n";
 	        return 1;
@@ -315,7 +337,7 @@ int main(int argc, char** argv)
 	    	    std::vector<fs::directory_entry> currentvec(stlbegin, stlend);
 	    	    for(std::vector<fs::directory_entry>::iterator stl = currentvec.begin(); stl != currentvec.end(); ++stl){
 					PolygonMesh* mesh = new PolygonMesh();
-	    	    	loadSTLFile((*stl).path().native(), *mesh, 0.0);
+	    	    	loadSTLFile((*stl).path().native(), *mesh, xrayconfig.hounsfieldvalue());
 					checkOpenGLErrorStatus(__FILE__, __FUNCTION__, __LINE__);
 					g_xray_renderer.addInnerSurface(mesh);
 	    	    }
@@ -385,8 +407,8 @@ void loadSTLFile(const std::string& fname, PolygonMesh& mesh, double hounsfieldv
 
    	// Set geometry
 	mesh.setFilename(stl_filename.data());
-	mesh.loadSTLFile(false, true, true, true, cm, GL_STATIC_DRAW);
-	mesh.mergeVertices(true);
+	mesh.loadSTLFile(false, true, false, true, cm, GL_STATIC_DRAW);
+	mesh.mergeVertices(false);
 	mesh.setHounsfieldValue(hounsfieldval);
 //	mesh.applyScale(3.0);
 
@@ -396,13 +418,24 @@ void loadSTLFile(const std::string& fname, PolygonMesh& mesh, double hounsfieldv
 
 
 //-----------------
-void loadDetector()
+void loadDetector(xray::XRayConfig& config)
 //-----------------
 {
-	g_xray_detector.setResolutionInUnitsOfLengthPerPixel(g_resolution);
+
+	g_xray_detector.setResolutionInUnitsOfLengthPerPixel(cm/(config.detector_resolution()));
+
+
+	unsigned int pxx = static_cast<unsigned int>(config.detector_resolution()*config.detector_size().x());
+	unsigned int pxy = static_cast<unsigned int>(config.detector_resolution()*config.detector_size().y());
+	Vec2ui g_number_of_pixels(pxx, pxy);
 	g_xray_detector.setNumberOfPixels(g_number_of_pixels);
-	g_xray_detector.setDetectorPosition(g_detector_position);
-	g_xray_detector.setUpVector(g_detector_up_vector);
+
+	VEC3 pos(config.detector_position().x()*cm,config.detector_position().y()*cm,config.detector_position().z()*cm);
+	g_xray_detector.setDetectorPosition(pos);
+
+	VEC3 up(config.detector_up().x()*cm,config.detector_up().y()*cm,config.detector_up().z()*cm);
+	up.normalize();
+	g_xray_detector.setUpVector(up);
 
 	// The X-ray image is not up-to-date
 	g_is_xray_image_up_to_date = false;
@@ -410,17 +443,18 @@ void loadDetector()
 
 
 //---------------
-void loadSource()
+void loadSource(xray::XRayConfig& config)
 //---------------
 {
 	// Set the energy
-	g_xray_beam.initialise(g_incident_energy);
+	g_xray_beam.initialise(config.energy() *keV);
 
 	// Set the source position
 //	g_xray_detector.setXrayPointSource(g_source_position);
 	//g_xray_detector.setParallelBeam();
 //	g_xray_detector.setPointSource();
-	g_xray_detector.setSquareSource(g_source_position, 8, 0.6 *cm);
+	VEC3 pos(config.source_position().x()*cm,config.source_position().y()*cm,config.source_position().z()*cm);
+	g_xray_detector.setSquareSource(pos, config.emitter_samples_per_dimension(), config.emitter_size() *cm);
 
 	// The X-ray image is not up-to-date
 	g_is_xray_image_up_to_date = false;

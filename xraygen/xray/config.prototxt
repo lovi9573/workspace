@@ -1,0 +1,47 @@
+
+	xrayconfig {
+		input_path: "/home/jlovitt/git/workspace/xraygen/xray/stl"
+		output_path: "/home/jlovitt/git/workspace/xraygen/xray/output"
+		energy: 2048
+		detector_resolution: 4
+		detector_size {
+			x: 150
+			y: 124
+		}
+		distance_unit: cm
+		source_position {
+			x: 0
+			y: 0
+			z: 140
+		}
+		detector_position {
+			x: 0
+			y: 0
+			z: -1
+		}
+		detector_up {
+			x: 0
+			y: 1
+			z: 0
+		}
+		hounsfieldvalue: -10.0
+		emitter_samples_per_dimension: 4
+		emitter_size: 0.5
+		
+		
+	}
+	physicsconfig {
+		num_time_steps: 225
+		solver_frequency: 100
+		solver_iterations: 10
+	}
+	generatorconfig {
+		save_path: "/home/jlovitt/git/workspace/xraygen/xray/stl"
+		save_prefix: "generated"
+		num_images: 1
+		num_fries: 2048
+		width: 0.3125
+		min_length: 5.0
+		max_length: 12.5
+	}
+

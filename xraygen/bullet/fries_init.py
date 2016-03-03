@@ -11,13 +11,14 @@ imp.reload(sp)
 
 N_IMAGES = 1
 N_STEPS = 225
-N_FRIES = 512
+N_FRIES = 1024
 PHYSICS_FREQ = 100
 PHYSICS_SOLVER_ITER = 10
 SAVE_PATH = "/home/jlovitt/git/workspace/xraygen/xray/stl/"
 FILE_PREFIX = 'generated'
-LENGTH_MIN = 2.5
-LENGTH_MAX = 5.0
+WIDTH = 1.0
+LENGTH_MIN = 5.0
+LENGTH_MAX = 12.0
 
 if __name__ == "__main__":
     bpy.ops.object.select_all(action='DESELECT')
@@ -38,7 +39,7 @@ if __name__ == "__main__":
 
     for gen in range(N_IMAGES):
         bpy.context.scene.frame_set(0)
-        gf.generate(N_FRIES, LENGTH_MIN, LENGTH_MAX)
+        gf.generate(N_FRIES, WIDTH, LENGTH_MIN, LENGTH_MAX)
         for i in range(N_STEPS):
             bpy.context.scene.frame_set(bpy.context.scene.frame_current + 1)
             if i %100 ==0:

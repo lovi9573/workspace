@@ -6,7 +6,6 @@ import mathutils as mu
 
 
 
-
 from bpy.props import FloatProperty, BoolProperty, FloatVectorProperty
 
 
@@ -40,14 +39,21 @@ class AddCurve():
             #polyline.bezier_points[i].co = (x, y, z)
 
         curveOB = bpy.data.objects.new('curve', data)
+        bpy.context.scene.objects.link(curveOB)
         context.scene.cursor_location = verts[1]
         bpy.ops.object.select_all(action='DESELECT')
         curveOB.select = True
+        bpy.context.scene.objects.active = curveOB
         bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
-
-        bpy.context.scene.objects.link(curveOB)
         return {'FINISHED'}
 
+def apply_curve(obj, curve, axis='POS_Y'):
+    bpy.ops.object.select_all(action='DESELECT')
+    obj.select = True
+    bpy.context.scene.objects.active = obj
+    bpy.ops.object.modifier_add(type='CURVE')
+    obj.modifiers['Curve'].object = curve
+    obj.modifiers['Curve'].deform_axis = axis
 
 if __name__ == "__main__":
     curve_adder = AddCurve()

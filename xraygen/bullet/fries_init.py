@@ -10,15 +10,15 @@ imp.reload(gf)
 imp.reload(sp)
 
 N_IMAGES = 1
-N_STEPS = 225
-N_FRIES = 1024
+N_STEPS = 250
+N_FRIES = 512
 PHYSICS_FREQ = 100
 PHYSICS_SOLVER_ITER = 10
 SAVE_PATH = "/home/jlovitt/git/workspace/xraygen/xray/stl/"
 FILE_PREFIX = 'generated'
 WIDTH = 1.0
-LENGTH_MIN = 5.0
-LENGTH_MAX = 12.0
+LENGTH_MIN = 12.0
+LENGTH_MAX = 18.0
 
 if __name__ == "__main__":
     bpy.ops.object.select_all(action='DESELECT')

@@ -5,7 +5,9 @@ import math
 import time
 import mathutils as mu
 from bpy_extras import object_utils
-
+import curve_add as ca
+import imp
+imp.reload(ca)
 
 def gen_num():
     return bpy.context.scene.gen_number
@@ -16,14 +18,14 @@ def add_box(width, height, depth):
     no actual mesh data creation is done here.
     """
     
-    segments = 4
+    segments = 16
     verts = []
     for d in range(segments+1):
-        offset = 2*d/segments
-        verts += [(+1.0, -1.0+d, -1.0),
-                 (-1.0, -1.0+d, -1.0),
-                 (-1.0, -1.0+d, +1.0),
-                 (+1.0, -1.0+d, +1.0)
+        offset = 2.0*d/segments
+        verts += [(+1.0, -1.0+offset, -1.0),
+                 (-1.0, -1.0+offset, -1.0),
+                 (-1.0, -1.0+offset, +1.0),
+                 (+1.0, -1.0+offset, +1.0)
                  ]
 
     n_verts = len(verts)    
@@ -110,7 +112,7 @@ class AddBox():
             self.depth = random.uniform(lmin,lmax)
             verts_loc, faces = add_box(w,
                                        w,
-                                       self.depth,
+                                       self.depth/2,
                                        )
             name = "Fry{}-{:0>4}".format(gen_num(),i)
             mesh = bpy.data.meshes.new(name)
@@ -133,15 +135,18 @@ class AddBox():
             ob = bpy.data.objects.new(internal_name,mesh)
             objs.append(ob)
             bpy.context.scene.objects.link(ob)
+            #curvature
+            curve = ca.add_curve(context,self.depth, 3)
+            ca.apply_curve(ob,curve)
         t.time('object_create')
         for obj in objs:
-            obj.rotation_euler[:] = random.uniform(-math.pi/8,math.pi/8),\
-                                 random.uniform(0,2*math.pi),\
-                                 random.uniform(0,2*math.pi)
             obj.location[:] = \
                   random.uniform(-self.LOCATION_RANGE,self.LOCATION_RANGE), \
                   random.uniform(-self.LOCATION_RANGE,self.LOCATION_RANGE), \
                   random.uniform(self.LOCATION_RANGE,6*self.LOCATION_RANGE)
+            obj.rotation_euler[:] = random.uniform(-math.pi/8,math.pi/8),\
+                     random.uniform(0,2*math.pi),\
+                     random.uniform(0,2*math.pi)
         t.time('transform')
         fry_group = bpy.data.groups['Fries-Auto']
         for obj in objs:               
@@ -171,3 +176,5 @@ def generate(n,w, lmin, lmax):
     
 
 
+if __name__ == "__main__":
+    generate(1,1,12,16)

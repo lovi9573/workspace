@@ -104,7 +104,7 @@ class AddBox():
             subtype='EULER',
             )
 
-    def execute(self, context,n, w, lmin, lmax):
+    def execute(self, context,n, w, lmin, lmax, pcurve=False):
         bpy.context.scene.cursor_location = mu.Vector([0,0,0])
         t = Timer()
         objs = []
@@ -136,8 +136,9 @@ class AddBox():
             objs.append(ob)
             bpy.context.scene.objects.link(ob)
             #curvature
-            curve = ca.add_curve(context,self.depth, 3)
-            ca.apply_curve(ob,curve)
+            if random.uniform(0.0,1.0) < pcurve:
+                curve = ca.add_curve(context,self.depth, 3)
+                ca.apply_curve(ob,curve)
         t.time('object_create')
         for obj in objs:
             obj.location[:] = \
@@ -166,11 +167,11 @@ class AddBox():
         return {'FINISHED'}
 
 
-def generate(n,w, lmin, lmax):
+def generate(n,w, lmin, lmax, pcurve):
     bpy.ops.object.select_all(action='DESELECT')
     bpy.ops.screen.frame_jump(end=False)
     op = AddBox()
-    op.execute(bpy.context,n,w, lmin, lmax)
+    op.execute(bpy.context,n,w, lmin, lmax, pcurve)
     print("Fries Generated {}".format(bpy.context.scene.gen_number))
     bpy.context.scene.gen_number += 1
     

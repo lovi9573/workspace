@@ -104,16 +104,21 @@ class AddBox():
             subtype='EULER',
             )
 
-    def execute(self, context,n, w, lmin, lmax, pcurve=False):
+    def execute(self, context,volume, w, lmin, lmax, mean, pcurve=False):
         bpy.context.scene.cursor_location = mu.Vector([0,0,0])
         t = Timer()
         objs = []
-        for i in range(n):
-            self.depth = random.uniform(lmin,lmax)
+        generated_volume = 0.0
+        i = 0
+        while generated_volume < volume:
+            self.depth = random.normalvariate(mean,2.5)
+            self.depth = max(self.depth,lmin)
+            self.depth = min(self.depth,lmax)
             verts_loc, faces = add_box(w,
                                        w,
                                        self.depth/2,
                                        )
+            generated_volume += w*w*self.depth
             name = "Fry{}-{:0>4}".format(gen_num(),i)
             mesh = bpy.data.meshes.new(name)
             internal_name = mesh.name
@@ -139,6 +144,7 @@ class AddBox():
             if random.uniform(0.0,1.0) < pcurve:
                 curve = ca.add_curve(context,self.depth, 3)
                 ca.apply_curve(ob,curve)
+            i +=1
         t.time('object_create')
         for obj in objs:
             obj.location[:] = \
@@ -167,11 +173,11 @@ class AddBox():
         return {'FINISHED'}
 
 
-def generate(n,w, lmin, lmax, pcurve):
+def generate(volume,w, lmin, lmax, mean, pcurve):
     bpy.ops.object.select_all(action='DESELECT')
     bpy.ops.screen.frame_jump(end=False)
     op = AddBox()
-    op.execute(bpy.context,n,w, lmin, lmax, pcurve)
+    op.execute(bpy.context,volume,w, lmin, lmax, mean, pcurve)
     print("Fries Generated {}".format(bpy.context.scene.gen_number))
     bpy.context.scene.gen_number += 1
     

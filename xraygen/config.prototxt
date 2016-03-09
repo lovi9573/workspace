@@ -1,12 +1,12 @@
 
 	xrayconfig {
-		input_path: "/home/jlovitt/git/workspace/xraygen/xray/stl"
-		output_path: "/home/jlovitt/git/workspace/xraygen/xray/output"
-		energy: 28048
-		detector_resolution: 4
+		input_path: "/home/jlovitt/storage/data/xrays/stl"
+		output_path: "/home/jlovitt/storage/data/xrays/output"
+		energy: 100
+		detector_resolution: 17
 		detector_size {
-			x: 150
-			y: 124
+			x: 40
+			y: 50
 		}
 		distance_unit: cm
 		source_position {
@@ -17,16 +17,17 @@
 		detector_position {
 			x: 0
 			y: 0
-			z: -1
+			z: -10
 		}
 		detector_up {
 			x: 0
 			y: 1
 			z: 0
 		}
-		hounsfieldvalue: 10.0
+		detector_saturation_value: 0.09
+		hounsfieldvalue: 50.0
 		emitter_samples_per_dimension: 4
-		emitter_size: 0.5
+		emitter_size: 1.5
 		
 		
 	}

@@ -3,13 +3,13 @@ import bmesh
 import random
 import math
 import mathutils as mu
-import generate_fries as gf
+#import generate_fries as gf
 #import bge
 import time
 import imp
 from os import path
 import os
-imp.reload(gf)
+#imp.reload(gf)
 
 
 def select_fries():
@@ -32,8 +32,8 @@ def get_max_keyframe(obj_list):
     return max_keyframe
 
 
-def save(save_path,pre):
-    save_dir = path.join(save_path,"{}{:0>5}".format(pre,gf.gen_num()))
+def save(save_path,pre,uid):
+    save_dir = path.join(save_path,"{}{:0>5}".format(pre,uid))
     if not path.exists(save_dir):
         os.makedirs(save_dir)
     group = bpy.data.groups["Fries-Auto"]
@@ -53,7 +53,7 @@ def save(save_path,pre):
         )
     select_fries()
     bpy.ops.export_mesh.stl(\
-            filepath=path.join(save_dir,"..","{}{}.stl".format(pre,gf.gen_num())),\
+            filepath=path.join(save_dir,"..","{}{}.stl".format(pre,uid)),\
             check_existing=False, \
             #axis_forward='-Z', \
             #axis_up='-Y', \

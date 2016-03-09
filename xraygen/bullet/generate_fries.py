@@ -5,9 +5,57 @@ import math
 import time
 import mathutils as mu
 from bpy_extras import object_utils
-import curve_add as ca
+#import curve_add as ca
 import imp
-imp.reload(ca)
+#imp.reload(ca)
+
+def add_curve( context, length, num_verts):
+    group = bpy.data.groups["Auto-Curves"]
+        
+    segment_length = length/num_verts
+    y_0 = -length/2 - segment_length
+    num_verts +=2
+    verts = []
+    n = lambda : random.normalvariate(0,2)
+    for v in range(num_verts+1 ):
+        offset = v*segment_length
+        verts += [(n(),y_0+offset,n())]
+
+    data = bpy.data.curves.new('curve', type='CURVE')
+    data.dimensions = '3D'
+    data.resolution_u = 2
+
+    polyline = data.splines.new('NURBS')
+    polyline.points.add(len(verts)-1)
+    #polyline.bezier_points.add(len(verts))
+    for i, v in enumerate(verts):
+        x,y,z = v
+        polyline.points[i].co = (x, y, z, 1)
+        #polyline.bezier_points[i].co = (x, y, z)
+
+    curveOB = bpy.data.objects.new('curve', data)
+    #curveOB.location = mu.Vector([0,0,0])
+    bpy.context.scene.objects.link(curveOB)
+    context.scene.cursor_location = verts[1]
+    bpy.ops.object.select_all(action='DESELECT')
+    curveOB.select = True
+    bpy.context.scene.objects.active = curveOB
+    bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
+    return curveOB
+
+def apply_curve(obj, curve, axis='POS_Y'):
+    bpy.ops.object.select_all(action='DESELECT')
+    obj.select = True
+    bpy.context.scene.objects.active = obj
+    bpy.ops.object.modifier_add(type='CURVE')
+    obj.modifiers['Curve'].object = curve
+    obj.modifiers['Curve'].deform_axis = axis
+    bpy.context.scene.objects.active = obj
+    bpy.ops.object.modifier_apply(apply_as='DATA',modifier='Curve')
+    bpy.ops.object.select_all(action='DESELECT')
+    curve.select = True
+    bpy.ops.object.delete(use_global=False)
+
 
 def gen_num():
     return bpy.context.scene.gen_number
@@ -18,7 +66,7 @@ def add_box(width, height, depth):
     no actual mesh data creation is done here.
     """
     
-    segments = 16
+    segments = 1
     verts = []
     for d in range(segments+1):
         offset = 2.0*d/segments
@@ -38,8 +86,11 @@ def add_box(width, height, depth):
 
     faces += [(n_verts-4,n_verts-3,n_verts-2,n_verts-1)]
     # apply size
+    w = width/2.0
+    h = height/2.0
+    d = depth/2.0
     for i, v in enumerate(verts):
-        verts[i] = v[0] * width, v[1] * depth, v[2] * height
+        verts[i] = v[0] * w, v[1] * d, v[2] * h
     return verts, faces
 
 
@@ -65,7 +116,7 @@ class Timer():
 
 class AddBox():
     """Add a simple box mesh"""
-    LOCATION_RANGE=45
+    LOCATION_RANGE=15
     bl_idname = "mesh.fries_add"
     bl_label = "Add Fries"
     bl_options = {'REGISTER', 'UNDO'}
@@ -116,11 +167,14 @@ class AddBox():
             self.depth = min(self.depth,lmax)
             verts_loc, faces = add_box(w,
                                        w,
-                                       self.depth/2,
+                                       self.depth,
                                        )
             generated_volume += w*w*self.depth
-            name = "Fry{}-{:0>4}".format(gen_num(),i)
-            mesh = bpy.data.meshes.new(name)
+            name = "Fry-{:0>5}".format(i)
+            if name not in bpy.data.meshes:
+              mesh = bpy.data.meshes.new(name)
+            else:
+              mesh = bpy.data.meshes[name]
             internal_name = mesh.name
             
             
@@ -142,15 +196,15 @@ class AddBox():
             bpy.context.scene.objects.link(ob)
             #curvature
             if random.uniform(0.0,1.0) < pcurve:
-                curve = ca.add_curve(context,self.depth, 3)
-                ca.apply_curve(ob,curve)
+                curve = add_curve(context,self.depth, 3)
+                apply_curve(ob,curve)
             i +=1
         t.time('object_create')
         for obj in objs:
             obj.location[:] = \
                   random.uniform(-self.LOCATION_RANGE,self.LOCATION_RANGE), \
                   random.uniform(-self.LOCATION_RANGE,self.LOCATION_RANGE), \
-                  random.uniform(self.LOCATION_RANGE,6*self.LOCATION_RANGE)
+                  random.uniform(self.LOCATION_RANGE,8*self.LOCATION_RANGE)
             obj.rotation_euler[:] = random.uniform(-math.pi/8,math.pi/8),\
                      random.uniform(0,2*math.pi),\
                      random.uniform(0,2*math.pi)
@@ -170,18 +224,19 @@ class AddBox():
             ##bpy.context.object.game.collision_bounds_type = 'BOX'
         t.time('group/collision')
         t.report()
+        print("{} Fries Generated".format(i))
         return {'FINISHED'}
 
 
 def generate(volume,w, lmin, lmax, mean, pcurve):
+    print("Generation {}".format(bpy.context.scene.gen_number))
     bpy.ops.object.select_all(action='DESELECT')
     bpy.ops.screen.frame_jump(end=False)
     op = AddBox()
     op.execute(bpy.context,volume,w, lmin, lmax, mean, pcurve)
-    print("Fries Generated {}".format(bpy.context.scene.gen_number))
     bpy.context.scene.gen_number += 1
     
 
 
 if __name__ == "__main__":
-    generate(1,1,12,16)
+    generate(1000,0.635,2,12,9,0)

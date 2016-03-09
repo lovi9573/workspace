@@ -19,9 +19,10 @@ message Config{
 		required Vec3 source_position = 7;
 		required Vec3 detector_position = 8;
 		required Vec3 detector_up = 9;
-		required float hounsfieldvalue = 10;
-		required int32 emitter_samples_per_dimension = 11;
-		required float emitter_size = 12;
+		required float detector_saturation_value = 10;
+		required float hounsfieldvalue = 11;
+		required int32 emitter_samples_per_dimension = 12;
+		required float emitter_size = 13;
 
 	}
 

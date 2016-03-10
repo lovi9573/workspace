@@ -15,12 +15,12 @@ imp.reload(main)
 #from google.protobuf import text_format
 
 class Settings():
-  N_IMAGES = 2
-  N_STEPS = 250
+  N_IMAGES = 20
+  N_STEPS = 200
   #N_FRIES = 1534
-  VOLUME = 1000
-  PHYSICS_FREQ = 100
-  PHYSICS_SOLVER_ITER = 10
+  VOLUME = 8000
+  PHYSICS_FREQ = 180
+  PHYSICS_SOLVER_ITER = 5
   SAVE_PATH = "/home/jlovitt/storage/data/xrays/stl/"
   FILE_PREFIX = 'generated'
   WIDTH = 0.635

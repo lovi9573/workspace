@@ -331,6 +331,7 @@ int main(int argc, char** argv)
 	    }
 		fs::directory_iterator begin(p), end;
 	    std::vector<fs::directory_entry> v(begin, end);
+	    std::sort(v.begin(), v.end());
 	    for(std::vector<fs::directory_entry>::iterator it = v.begin(); it != v.end(); ++it){
 	    	if ((*it).status().type() == fs::directory_file ){
 	    		std::cout << "Processsing: "<< (*it).path().native() << '\n';

@@ -66,5 +66,5 @@ def save(save_path,pre,uid):
 
 def remove_fries():
     select_fries()
-    bpy.ops.object.delete(use_global=False)
+    bpy.ops.object.delete(use_global=True)
  

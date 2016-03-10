@@ -32,13 +32,15 @@ def init(s):
 
   sp.remove_fries()
   bpy.ops.object.select_all(action='DESELECT')
+  bpy.data.scenes['Scene'].frame_start = 0
+  bpy.data.scenes['Scene'].frame_end = 500
   bpy.data.scenes['Scene'].rigidbody_world.steps_per_second = s.PHYSICS_FREQ
   bpy.data.scenes['Scene'].rigidbody_world.solver_iterations = s.PHYSICS_SOLVER_ITER
   print("Fry Init complete")
 
 def run(s):
   uid = 1
-  for mean in range(5,10,2):
+  for mean in range(12,17,2):
       for gen in range(s.N_IMAGES):
           bpy.context.scene.frame_set(0)
           gf.generate(s.VOLUME, s.WIDTH, s.LENGTH_MIN, s.LENGTH_MAX, mean, s.PCURVE)

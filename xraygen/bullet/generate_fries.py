@@ -9,6 +9,9 @@ from bpy_extras import object_utils
 import imp
 #imp.reload(ca)
 
+
+INITIAL_VELOCITY = False
+
 def add_curve( context, length, num_verts):
     group = bpy.data.groups["Auto-Curves"]
         
@@ -192,37 +195,65 @@ class AddBox():
             mesh.update()
             # add the mesh as an object into the scene with this utility module
             ob = bpy.data.objects.new(internal_name,mesh)
-            objs.append(ob)
             bpy.context.scene.objects.link(ob)
+            objs.append(ob)
+            i +=1
+        t.time('object_create')
+        if pcurve > 0.0:
+          for obj in objs:
             #curvature
             if random.uniform(0.0,1.0) < pcurve:
                 curve = add_curve(context,self.depth, 3)
                 apply_curve(ob,curve)
-            i +=1
-        t.time('object_create')
+          t.time('object_link_and_curve')
+#         for obj in objs:
+#             pass
+#             #obj.modifiers.new('col','COLLISION')
+#         t.time('collision_mod')
         for obj in objs:
-            obj.location[:] = \
-                  random.uniform(-self.LOCATION_RANGE,self.LOCATION_RANGE), \
-                  random.uniform(-self.LOCATION_RANGE,self.LOCATION_RANGE), \
-                  random.uniform(self.LOCATION_RANGE,8*self.LOCATION_RANGE)
-            obj.rotation_euler[:] = random.uniform(-math.pi/8,math.pi/8),\
-                     random.uniform(0,2*math.pi),\
-                     random.uniform(0,2*math.pi)
-        t.time('transform')
+          bpy.context.scene.rigidbody_world.group.objects.link(obj)
+        t.time('rigid_body')
         fry_group = bpy.data.groups['Fries-Auto']
         for obj in objs:               
             fry_group.objects.link(obj)
-            obj.modifiers.new('col','COLLISION')
-            bpy.context.scene.rigidbody_world.group.objects.link(obj)
-            ##bpy.ops.object.group_link(group="Fries-Auto")
-            #bpy.context.scene.objects.active = obj
-            ##bpy.ops.object.modifier_add(type='COLLISION')
-            #bpy.ops.rigidbody.object_add()
-            #obj.rigid_body.use_deactivation = True
-            ##bpy.context.object.game.physics_type = 'RIGID_BODY'
-            ##bpy.context.object.game.use_collision_bounds = True
-            ##bpy.context.object.game.collision_bounds_type = 'BOX'
-        t.time('group/collision')
+        t.time('group_link')
+        if INITIAL_VELOCITY:
+          scn = bpy.context.scene
+  #         scn.frame_set(0)
+  #         scn.frame_set(1)
+  #         scn.frame_set(2)
+  #         scn.frame_set(3)
+  #         scn.frame_set(4)
+  #         scn.frame_set(0)
+          f = 0
+          while obj.rigid_body == None:
+            print(f)
+            scn.frame_set(f)
+            f += 1
+          scn.frame_set(0)
+          t.time('Prime_scene')
+        for obj in objs:
+          x = random.uniform(-self.LOCATION_RANGE,self.LOCATION_RANGE)
+          y = random.uniform(-self.LOCATION_RANGE,self.LOCATION_RANGE)
+          z = random.uniform(self.LOCATION_RANGE,8*self.LOCATION_RANGE)
+          obj.location[:] = (x,y,z)
+          obj.rotation_euler[:] = random.uniform(-math.pi/8,math.pi/8),\
+                   random.uniform(0,2*math.pi),\
+                   random.uniform(0,2*math.pi)
+          if INITIAL_VELOCITY:
+            '''
+            Possible better solution for this at https://developer.blender.org/T47402
+            '''
+            obj.collision.damping_factor = 1.0
+            obj.rigid_body.kinematic = True
+            obj.keyframe_insert(data_path='rigid_body.kinematic',frame=0)
+            obj.keyframe_insert(data_path='location',frame=0, index=2)
+   
+            obj.location[:] = (x,y,z-4)
+            obj.rigid_body.kinematic = False
+            obj.keyframe_insert(data_path='rigid_body.kinematic',frame=3)
+            obj.keyframe_insert(data_path='location',frame=3, index=2)
+        t.time('transform')
         t.report()
         print("{} Fries Generated".format(i))
         return {'FINISHED'}

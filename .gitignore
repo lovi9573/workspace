@@ -1,4 +1,8 @@
 .project
 *.swp
 *.pyc
+*.blend1
+config.pb.*
 xraygen/xray/expose
+xraygen/bullet/config_pb2.py
+

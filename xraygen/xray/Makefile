@@ -14,6 +14,7 @@ all: build
 
 protobuf:
 	cd ..;	protoc config.proto --cpp_out=xray
+	cd ..;	protoc config.proto --python_out=bullet
 	c++ $(FLAGS) $(INCLUDES) -c config.pb.cc -o config.pb.o 
 LIBPATHS += -L/home/jlovitt/local/lib
 LIBS += -lprotobuf

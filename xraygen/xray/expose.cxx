@@ -98,6 +98,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "itkRescaleIntensityImageFilter.h"
 #include "itkImageFileWriter.h"
 #include "itkImageRegionIterator.h"
+#include "itkIntensityWindowingImageFilter.h"
 
 
 
@@ -220,7 +221,7 @@ void loadDetector(xray::XRayConfig&);
 void loadSource(xray::XRayConfig&);
 void loadXRaySimulator();
 void loadSTLFile(const std::string& aPrefix, PolygonMesh&, double);
-void updateXRayImage(const std::string& fname);
+void updateXRayImage(const std::string& fname, float);
 
 
 void initGL(){
@@ -330,6 +331,7 @@ int main(int argc, char** argv)
 	    }
 		fs::directory_iterator begin(p), end;
 	    std::vector<fs::directory_entry> v(begin, end);
+	    std::sort(v.begin(), v.end());
 	    for(std::vector<fs::directory_entry>::iterator it = v.begin(); it != v.end(); ++it){
 	    	if ((*it).status().type() == fs::directory_file ){
 	    		std::cout << "Processsing: "<< (*it).path().native() << '\n';
@@ -346,7 +348,7 @@ int main(int argc, char** argv)
 				out /= (*it).path().stem();
 				out.replace_extension(".png");
 				std::cout <<"Saving to: "<< out << '\n';
-				updateXRayImage(out.native());
+				updateXRayImage(out.native(), xrayconfig.detector_saturation_value());
 				g_xray_renderer.removeInnerSurfaces();
 	    	}
 	    }
@@ -479,7 +481,7 @@ void loadXRaySimulator()
 
 
 //--------------------
-void writeImage(XRayRenderer::PixelType* im, const char* fname)
+void writeImage(XRayRenderer::PixelType* im, float detectorsaturation, const char* fname)
 //--------------------
 {
 	typedef itk::Image<XRayRenderer::PixelType, 2> InputImageType;
@@ -508,16 +510,34 @@ void writeImage(XRayRenderer::PixelType* im, const char* fname)
 		++im;
 	}
 
+	//Get min and max of scaled
+//	float scalefactor = itk::NumericTraits<OutputPixelType>::max()/detectorsaturation;
+	typedef itk::MinimumMaximumImageCalculator<InputImageType> CalcType;
+	CalcType::Pointer minmaxcalc = CalcType::New();
+	minmaxcalc->SetImage(image);
+	minmaxcalc->Compute();
+	std::cout << "Max flux: " << minmaxcalc->GetMaximum() << ", Min flux: " << minmaxcalc->GetMinimum() << "\n";
+//	XRayRenderer::PixelType min = minmaxcalc->GetMinimum()*scalefactor;
+//	XRayRenderer::PixelType max = minmaxcalc->GetMaximum()*scalefactor;
 
-	typedef itk::RescaleIntensityImageFilter< InputImageType, InputImageType> RescaleType;
-	RescaleType::Pointer rescale = RescaleType::New();
-	rescale->SetInput(image);
-	rescale->SetOutputMinimum(0);
-	rescale->SetOutputMaximum(itk::NumericTraits<OutputPixelType>::max());
+
+//	typedef itk::RescaleIntensityImageFilter< InputImageType, InputImageType> RescaleType;
+//	RescaleType::Pointer rescale = RescaleType::New();
+//	rescale->SetInput(image);
+//	rescale->SetOutputMinimum(min);
+//	rescale->SetOutputMaximum(max);
+
+	typedef itk::IntensityWindowingImageFilter< InputImageType, InputImageType> WindowType;
+	WindowType::Pointer window = WindowType::New();
+	window->SetInput(image);
+	window->SetWindowMinimum(0);
+	window->SetWindowMaximum(detectorsaturation);
+	window->SetOutputMinimum(0);
+	window->SetOutputMaximum(itk::NumericTraits<OutputPixelType>::max());
 
 	typedef itk::CastImageFilter<  InputImageType, OutputImageType > FilterType;
 	FilterType::Pointer filter = FilterType::New();
-	filter->SetInput( rescale->GetOutput() );
+	filter->SetInput( window->GetOutput() );
 
 	typedef itk::ImageFileWriter< OutputImageType > WriterType;
 	WriterType::Pointer writer = WriterType::New();
@@ -535,7 +555,7 @@ void writeImage(XRayRenderer::PixelType* im, const char* fname)
 }
 
 //--------------------
-void updateXRayImage(const std::string& fname)
+void updateXRayImage(const std::string& fname, float detectorsaturation)
 //--------------------
 {
 	// The X-ray image is not up-to-date
@@ -548,7 +568,7 @@ void updateXRayImage(const std::string& fname)
 		// Normalise the X-ray image
 		//g_xray_renderer.normalise();
 
-		writeImage( g_xray_renderer.getXRayImage(), fname.c_str());
+		writeImage( g_xray_renderer.getXRayImage(), detectorsaturation, fname.c_str());
 //		g_xray_renderer.printLBuffer(OUTDIR"printLBuffer"+ext);
 //		g_xray_renderer.printSumMuxDx(OUTDIR"printSumMuxDx"+ext);
 //		g_xray_renderer.printEnergyFluence(OUTDIR"printEnergyFluence"+ext);

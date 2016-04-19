@@ -37,6 +37,7 @@ class FCLayerDef(LayerDef):
       LayerDef.__init__(self,params)
       self._outdim = outdim
       self._indim = None
+      self._tied_weights = params.get('tied_weights', True)
         
     def outdim(self):
         return self._outdim
@@ -87,8 +88,8 @@ class CorruptionLayerDef(LayerDef):
     def corruptionlevel(self):
       return self._corruptionlevel
       
-    def instance(self):
-        return CorruptionLayer()
+    def instance(self, g):
+        return CorruptionLayer(g)
   
     def __str__(self):
       return "Corruption layer at p({})".format(self._corruptionlevel)
@@ -340,14 +341,14 @@ class ConvLayer(FeedThroughLayer):
           dims = self.d.filterdim()+[indim[3], self.d.outdim()]
           self.W = tf.Variable(
                                tf.truncated_normal(dims,
-                                                 stddev=math.sqrt(1.0/(reduce(mul,self.d.filterdim()))),
+                                                 stddev=math.sqrt(3.0/(reduce(mul,self.d.filterdim()))),
                                                  dtype=tf.float32
                                                  ),
                                name='W_'+str(self.n))
           if not self.d._tied_weights:
             self.rev_W = tf.Variable(
                      tf.truncated_normal(dims,
-                                       stddev=math.sqrt(1.0/(reduce(mul,self.d.filterdim()))),
+                                       stddev=math.sqrt(3.0/(reduce(mul,self.d.filterdim()))),
                                        dtype=tf.float32
                                        ),
                      name='W_rev_'+str(self.n))
@@ -438,7 +439,7 @@ def entropy(a):
 
 class AutoEncoder(object):
     
-    def __init__(self,s,g, dp, log_path, checkpoint_path):
+    def __init__(self,s,g, dp, log_path, checkpoint_path, colnum=-1):
         self.dp = dp
         self.s = s
         self.g = g
@@ -446,12 +447,16 @@ class AutoEncoder(object):
         self.layers = [DataLayer(self.dp,g)]
         self.bottom_feed = self.layers[0].bottom_feed()
         self.LEARNING_RATE=0.9
-        self.alpha = 0.0
-        self.freeze = True
+        self.MOMENTUM = 0.0
+        self.alpha = 0.3
+        self.freeze = False
+        self.representation_loss = False
         self.EPS  = 0.0000001
         self.log_path = log_path
         self.checkpoint_path = checkpoint_path
         self.summaryid = 0
+        self.summarize = False
+        self.colnum = colnum
         
 
     def kl(self,p, p_hat):
@@ -469,24 +474,29 @@ class AutoEncoder(object):
         parameterlayers = self.layers
         if self.freeze:
           parameterlayers = [self.layers[-1]]
-        params = [w for l in parameterlayers for w in l.params()]
-        if len(params) == 0:
-          return 
-        saver = tf.train.Saver(params)
-        saver.save(self.s,path.join(self.checkpoint_path,'layer'+str(self.layer_number)))
+        for i,layer in enumerate(parameterlayers):
+          params = [w for w in layer.params()]
+          if len(params) != 0:
+            saver = tf.train.Saver(params)
+            prefix = ''
+            if self.colnum >=0:
+              prefix = 'col'+str(self.colnum)+"_"
+            saver.save(self.s,path.join(self.checkpoint_path,prefix+'layer'+str(i)))
      
-    def restore(self):
+    def restore(self, params):
       with self.g.as_default():
-        parameterlayers = self.layers
-        if self.freeze:
-          parameterlayers = [self.layers[-1]]
-        params = [w for l in parameterlayers for w in l.params()]
         if len(params) == 0:
-          return 
-        paramsdict = {w.name.strip(":[0..9]+"):w for w in params}
+          return False
+#         paramsdict = {w.name.strip(":[0..9]+"):w for w in params}
         saver = tf.train.Saver(params)
-        saver.restore(self.s,path.join(self.checkpoint_path,'layer'+str(self.layer_number)))
-        print(", ".join(map(str,parameterlayers)) + " Restored from checkpoint")
+        if os.path.isfile(path.join(self.checkpoint_path,'col'+str(self.colnum)+"_"+'layer'+str(self.layer_number))):
+          saver.restore(self.s,path.join(self.checkpoint_path,'col'+str(self.colnum)+"_"+'layer'+str(self.layer_number)))
+          return path.join(self.checkpoint_path,'col'+str(self.colnum)+"_"+'layer'+str(self.layer_number))
+        elif os.path.isfile(path.join(self.checkpoint_path,'layer'+str(self.layer_number))):
+          saver.restore(self.s,path.join(self.checkpoint_path,'layer'+str(self.layer_number)))
+          return path.join(self.checkpoint_path,'layer'+str(self.layer_number))
+        else:
+          return False
    
     def add_layer(self,definition):
       with self.g.as_default():
@@ -514,20 +524,25 @@ class AutoEncoder(object):
         tf.histogram_summary("representation_at_top"+str(self.layer_number), self._rep_ground_truth)
         
         #Build loss and optimization functions
-        self._individual_reconstruction_loss = tf.reduce_mean(
+        self._per_example_reconstruction_loss = tf.reduce_mean(
                                                               -self.cross_entropy(
-                                                                                  self._rep_ground_truth ,
-                                                                                  self._rep_recon),
+                                                                                  self.bottom_feed ,
+                                                                                  self._recon),
                                                               reduction_indices=range(
                                                                                       1,
-                                                                                      self._rep_recon.get_shape().ndims) 
+                                                                                      self._recon.get_shape().ndims) 
                                                               )
-        reconstruction_loss = tf.reduce_mean(
+        if self.representation_loss:
+          self._loss = tf.reduce_mean(
                                              -self.cross_entropy(
                                                                  self._rep_ground_truth ,
                                                                  self._rep_recon))
-        self._loss = reconstruction_loss
-        tf.scalar_summary("reconstruction_loss"+str(self.layer_number),reconstruction_loss)
+        else:
+          self._loss = tf.reduce_mean(
+                                             -self.cross_entropy(
+                                                                 self.bottom_feed ,
+                                                                 self._recon))
+        tf.scalar_summary("reconstruction_loss"+str(self.layer_number),self._loss)
         #Sparsity
         per_channel_mean_activation = tf.reduce_mean(
                                                      self._top,
@@ -551,32 +566,47 @@ class AutoEncoder(object):
           entropy_loss = definition.activation_entropy_lr*tf.reduce_mean(per_channel_activation_entropy)
           self._loss += entropy_loss
           tf.scalar_summary("activation_entropy_loss"+str(self.layer_number), entropy_loss)
-        #Active parameter selection
-        parameterlayers = [self.layers[-1]]
-        if not self.freeze:
-          parameterlayers = self.layers
-        layerparams = [w for l in parameterlayers for w in l.params()]
+          
+        #Parameter groups
+        newparameters=self.layers[-1].params()
+        existingparameters=[w for l in self.layers[0:-1] for w in l.params()]
+        if self.freeze:
+          trainableparameters=newparameters
+        else:
+          trainableparameters=newparameters+existingparameters
+        implicitparameters=[]
+        #Restore from checkpoint or Initialize new Variables
+        restore_file =  self.restore(newparameters)
+        if restore_file:
+          uninitializedparameters=[]
+          print("Layer {} restored from checkpoint {}".format(str(self.layer_number), restore_file))
+        else:
+          print("No Checkpoint found for layer {}".format(str(self.layer_number)))
+          uninitializedparameters=newparameters
+        
+        
         #Weight Decay
-        if self.alpha >0 and len(layerparams) > 0:
-          weightsmagnitude = [tf.reduce_sum(tf.pow(w,2)) for l in self.layers for w in l.params()]
-          paramsize = reduce(add,[reduce(mul,w.get_shape().as_list())  for l in self.layers for w in l.params() ])
+        if self.alpha >0 and len(trainableparameters) > 0:
+          weightsmagnitude = [tf.reduce_sum(tf.abs(w)) for w in trainableparameters]
+          paramsize = reduce(add,[reduce(mul,w.get_shape().as_list()) for w in trainableparameters ])
           weight_decay = reduce(add,weightsmagnitude)/paramsize
           self._loss += self.alpha*weight_decay
         # Optimization
-        if len(layerparams) > 0:
-          self.optimizer = tf.train.MomentumOptimizer(self.LEARNING_RATE,0.9,use_locking=True)
-          self.optimizer_objective = self.optimizer.minimize(self._loss, var_list=layerparams)
+        if len(trainableparameters) > 0:
+          self.optimizer = tf.train.MomentumOptimizer(self.LEARNING_RATE,self.MOMENTUM,use_locking=True)
+          self.optimizer_objective = self.optimizer.minimize(self._loss, var_list=trainableparameters)
           self.writer = tf.train.SummaryWriter(self.log_path,self.s.graph_def)
-          summarylist = [tf.histogram_summary(str(self.layer_number)+"_"+str(i),p) for i,p in enumerate(layerparams)]
-          self. summaries = tf.merge_all_summaries()
-          initparams = [self.optimizer.get_slot(v,n) for v in layerparams for n in self.optimizer.get_slot_names()]
-        #Restore from checkpoint or Initialize new Variables
-        if path.isfile(path.join(self.checkpoint_path,'layer'+str(self.layer_number))):
-          self.restore()
+          summarylist = [tf.histogram_summary(str(self.layer_number)+"_"+p.name,p) for i,p in enumerate(trainableparameters)]
+          optimizer_slots = [x  for x in [self.optimizer.get_slot(v,n) for v in trainableparameters for n in self.optimizer.get_slot_names()] if x != None]
+          implicitparameters += optimizer_slots
+          uninitializedparameters += optimizer_slots
+        if len(uninitializedparameters) > 0:
+          tf.initialize_variables(uninitializedparameters).run(session=self.s)
         else:
-          tf.initialize_variables(layerparams).run(session=self.s)
-        tf.initialize_variables(initparams).run(session=self.s)
+          print("WARNING: No optimizer parameters for layer {}.".format(str(self.layer_number)))
   #       tf.train.SummaryWriter.add_graph(self.s.graph_def, self.layer_number)
+        if self.summarize:
+          self. summaries = tf.merge_all_summaries()
   
     def top_shape(self):
       return self.injection.get_shape().as_list()
@@ -597,16 +627,19 @@ class AutoEncoder(object):
         l = self.s.run(self._loss,feed_dict=feed_dict)
         return l
       
-    def individual_reconstruction_loss(self,data):
+    def per_example_reconstruction_loss(self,data):
         feed_dict = {self.bottom_feed:data}
-        l = self.s.run(self._individual_reconstruction_loss,feed_dict=feed_dict)
+        l = self.s.run(self._per_example_reconstruction_loss,feed_dict=feed_dict)
         return l    
         
     def encode_mb(self,data): 
           feed_dict = {self.bottom_feed:data}
-          summary_str,_,dummy, l = self.s.run([self.summaries, self._recon,self.optimizer_objective,self._loss],feed_dict=feed_dict)
-          self.writer.add_summary(summary_str,self.summaryid)
-          self.summaryid +=1
+          if self.summarize:
+            summary_str,_,dummy, l = self.s.run([self.summaries, self._recon,self.optimizer_objective,self._loss],feed_dict=feed_dict)
+            self.writer.add_summary(summary_str,self.summaryid)
+            self.summaryid +=1
+          else:
+            _,dummy, l = self.s.run([self._recon,self.optimizer_objective,self._loss],feed_dict=feed_dict)
           return l
           
 

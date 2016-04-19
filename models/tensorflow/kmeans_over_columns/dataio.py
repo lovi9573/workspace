@@ -358,7 +358,7 @@ class MnistDataProvider:
     return (normal_image*255.0).astype(np.uint8)
 
   def get_mb_by_keys(self,keys):
-    samples = np.zeros(self.shape(), dtype=np.float32)
+    samples = np.zeros([len(keys)] +list(self.shape()[1:]), dtype=np.float32)
     labels = np.zeros([len(keys)],dtype=np.uint8)
     sorted_keys = sorted(keys)
     for n,key in enumerate(sorted_keys):

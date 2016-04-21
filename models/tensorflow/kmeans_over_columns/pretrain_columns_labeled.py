@@ -107,7 +107,7 @@ if __name__ == '__main__':
     LOG_DIR = path.join(BASE_PATH,'log/')
     IMG_DIR =  path.join(BASE_PATH,'img/')
     CHECKPOINT_DIR =  path.join(BASE_PATH,'check/')
-    dp = MnistDataProvider(DATA_PARAM,TRANSFORM_PARAM )
+    dp = CifarDataProvider(DATA_PARAM,TRANSFORM_PARAM )
     imgkeys = dp.get_keys()
     with tf.Session() as sess:
       for label in range(NUM_LABELS):

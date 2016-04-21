@@ -142,7 +142,7 @@ def save_recon(dp, column):
       imgs[channel,:,:,:] = c[0,:,:,:]
     im = w2i.tile_imgs(imgs, normalize=True)
 #       im = Image.fromarray(dp.denormalize(c[0,:]).astype(np.uint8).squeeze(),mode='L')
-    im.save(IMG_DIR+'col_pretrain_level'+str(layer_number+1)+'.png')    
+    im.save(IMG_DIR+'col_pretrain_level'+str(layer_number+1)+'_inject.png')    
 
 def save_top(dp, column):
     t = column.fwd(dp.get_mb().next()[0])
@@ -197,7 +197,7 @@ if __name__ == '__main__':
     LOG_DIR = path.join(BASE_PATH,'log/')
     IMG_DIR =  path.join(BASE_PATH,'img/')
     CHECKPOINT_DIR =  path.join(BASE_PATH,'check/')
-    dp = MnistDataProvider(DATA_PARAM,TRANSFORM_PARAM )
+    dp = CifarDataProvider(DATA_PARAM,TRANSFORM_PARAM )
     imgkeys = dp.get_keys()
     with tf.Session() as sess:
       g = tf.Graph()
@@ -234,6 +234,8 @@ if __name__ == '__main__':
               i += 1
           print "Layer {} trained on all data {} epochs".format(layer_number+1,l.get('Pretrain_epochs',0))
           column.save()
+          with open(path.join(IMG_DIR,"col_pretrain_losses".format(layer_number)),"a") as fout:
+            fout.write(str(layer_number)+": "+str(loss)+"\n")
 #           save_embedding(column,dp)
 
           #Visual investigation

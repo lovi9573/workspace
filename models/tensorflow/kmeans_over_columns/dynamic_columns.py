@@ -186,19 +186,20 @@ def save_recon(dp, columns, immap):
 def save_top(dp, columns,immap):
     for n,column in columns.iteritems():
       mapped_samples,_,_ = get_mapped_batch(dp, n, immap)
-      if   len(mapped_samples) == dp.shape()[0]:
-        t = column.fwd(mapped_samples)
-        top_shape = column.top_shape()
-        if len(top_shape) == 4:
-          im = w2i.tile_imgs(t)
-    #       im = Image.fromarray(dp.denormalize(c[0,:]).astype(np.uint8).squeeze(),mode='L')
-          im.save(IMG_DIR+'col'+str(n)+'_level'+str(layer_number+1)+'_top.png')  
-        elif len(top_shape) == 2:
-          t = t.reshape([1]+top_shape+[1])
-          im = w2i.tile_imgs(t)
-          im.save(IMG_DIR+'col'+str(n)+'_level'+str(layer_number+1)+'_top.png')  
-        else:  
-          print("Top not saved.  Dimenstions {}".format(top_shape)) 
+      mapped_batch = np.zeros(dp.shape())
+      mapped_batch[0:len(mapped_samples),:] = mapped_samples
+      t = column.fwd(mapped_samples)
+      top_shape = column.top_shape()
+      if len(top_shape) == 4:
+        im = w2i.tile_imgs(t)
+  #       im = Image.fromarray(dp.denormalize(c[0,:]).astype(np.uint8).squeeze(),mode='L')
+        im.save(IMG_DIR+'col'+str(n)+'_level'+str(layer_number+1)+'_top.png')  
+      elif len(top_shape) == 2:
+        t = t.reshape([1]+top_shape+[1])
+        im = w2i.tile_imgs(t)
+        im.save(IMG_DIR+'col'+str(n)+'_level'+str(layer_number+1)+'_top.png')  
+      else:  
+        print("Top not saved.  Dimenstions {}".format(top_shape)) 
 
 def save_exemplars(dp, columns,immap):
       for i in range(len(columns)):
@@ -323,7 +324,7 @@ if __name__ == '__main__':
     LOG_DIR = path.join(BASE_PATH,'log/')
     IMG_DIR =  path.join(BASE_PATH,'img/')
     CHECKPOINT_DIR =  path.join(BASE_PATH,'check/')
-    dp = MnistDataProvider(DATA_PARAM,TRANSFORM_PARAM )
+    dp = CifarDataProvider(DATA_PARAM,TRANSFORM_PARAM )
     imgkeys = dp.get_keys()
     columns = {}
     with tf.Session() as sess:

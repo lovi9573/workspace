@@ -51,17 +51,12 @@ def tile_rgb_imgs(dat):
   
   """
   n,y,x,c = dat.shape
-  print dat.shape
-  minval = np.min(dat)
-  maxval = np.max(dat)
-  dat = (dat - minval)/(maxval-minval)*255
-  dat = dat.astype(np.uint8)
   horizontal_images_in_display_ideal = math.sqrt(n)
   horizontal_images_in_display = closeFactor(n, horizontal_images_in_display_ideal)
   vertical_images_in_display = n/horizontal_images_in_display
   
   imgs = np.ndarray([vertical_images_in_display*(y+1),horizontal_images_in_display*(x+1),3],dtype=np.uint8)
-  imgs[:,:,:] = 0  
+  imgs[:,:,:] = np.random.rand(*imgs.shape)*256 
   
   for img_row in range(vertical_images_in_display):
           for img in range(horizontal_images_in_display):
@@ -69,7 +64,6 @@ def tile_rgb_imgs(dat):
                    img*(x+1):(img+1)*(x+1)-1,\
                    :] = \
               dat[(img_row*horizontal_images_in_display+img),:,:,:]
-  print imgs.shape
   return Image.fromarray(imgs,mode='RGB')  
   
   
@@ -82,9 +76,9 @@ def tile_imgs(dat, normalize=False):
   n,y,x,c = dat.shape
   minval = np.min(dat)
   maxval = np.max(dat)
-  dat = (dat - minval)/(maxval-minval)*255
+  dat = dat.astype(np.float32)
+  dat = 255*(dat - minval)/(maxval-minval)
   dat = dat.astype(np.uint8)
-#   print "max: {} min: {}\n".format(maxval,minval)
   
   if n == 1 and c != 3:
     horizontal_images_in_display_ideal = math.sqrt(n*c)

@@ -447,8 +447,8 @@ class AutoEncoder(object):
         self.layers = [DataLayer(self.dp,g)]
         self.bottom_feed = self.layers[0].bottom_feed()
         self.LEARNING_RATE=0.9
-        self.MOMENTUM = 0.0
-        self.alpha = 0.3
+        self.MOMENTUM = 0.2
+        self.alpha = 0.03 # mnist: 0.3
         self.freeze = False
         self.representation_loss = False
         self.EPS  = 0.0000001

@@ -14,6 +14,7 @@ from PIL import Image
 from google.protobuf import text_format
 import cPickle
 import gzip
+import weights_to_img as w2i
 
 from caffe import *
 
@@ -239,16 +240,29 @@ class CifarDataProvider:
     self.crop_size = transform_param.crop_size
     self.mirror = transform_param.mirror
     self._dat = {"filename":""}
+    self.cache_data()
+
+  def cache_data(self):
+    self.data = None
+    for filename in self.files:
+      fo = open(filename, 'rb')
+      datadict = cPickle.load(fo)
+      fo.close()
+      if not self.data:
+        self.data = datadict['data']
+        self.labels = np.asarray(datadict['labels'],dtype=np.int)
+        self.keys = [ filename+"_ex{:0>4}".format(n) for n in range(len(datadict['data']))]
+      else:
+        self.data = np.append(self.data, datadict['data'], axis=0)
+        self.labels = np.append(self.labels,datadict['labels'], axis=0)
+        self.keys += [ filename+"_ex{:0>4}".format(n) for n in range(len(datadict['data']))]
 
   def get_n_examples(self):
-    return 10000*len(self.files)
+    return len(self.labels)
+  
    
   def get_keys(self):
-    keys = []
-    for f in self.files:
-      for i in xrange(10000):
-            keys.append(f+"_ex{:0>4}".format(i))
-    return keys
+    return self.keys
 
   def shape(self):
       return (self.batch_size, self.crop_size, self.crop_size,3)
@@ -264,43 +278,32 @@ class CifarDataProvider:
     labels = np.zeros([len(keys)],dtype=np.uint8)
     sorted_keys = sorted(keys)
     for n,key in enumerate(sorted_keys):
-      fname,i = key.split("_ex")
-      if fname != self._dat['filename']:
-        fo = open(fname, 'rb')
-        self._dat = cPickle.load(fo)
-        self._dat['filename'] = fname
-        fo.close()
-      mb = self._dat["data"][i,:]
+      i = self.keys.index(key)
+      mb = self.data[i,:]
       mb_4 = mb.reshape([1,3,32,32])
       mb_n = self.normalize(mb_4)
       mb_t = mb_n.transpose([0,2,3,1])
       dx,dy = np.random.randint(32 - self.crop_size+1, size=2)
       samples[n,:] = mb_t[:,dx:dx+self.crop_size,dy:dy+self.crop_size,:]
-      labels[n] = self._dat["labels"][int(i)]
-      return (samples,labels,keys)
+      labels[n] = self.labels[i]
+    return (samples,labels,keys)
     
 
   def get_mb(self):
     samples = np.zeros([self.batch_size, self.crop_size,self.crop_size,3], dtype=np.float32)
-    labels = np.zeros([self.batch_size])
-    for filename in self.files:
-      fo = open(filename, 'rb')
-      datadict = cPickle.load(fo)
-      fo.close()
-      i = 0
-      while i < (10000 - self.batch_size):
-        mb = datadict["data"][i:i+self.batch_size,:]
-        mb_4 = mb.reshape([self.batch_size,3,32,32])
-        mb_n = self.normalize(mb_4)
-        mb_t = mb_n.transpose([0,2,3,1])
-        dx,dy = np.random.randint(32 - self.crop_size+1, size=2)
-        samples = mb_t[:,dx:dx+self.crop_size,dy:dy+self.crop_size,:]
-        labels = datadict["labels"][i:i+self.batch_size]
-        keys = []
-        for n in range(self.batch_size):
-          keys.append(filename+"_ex{:0>4}".format(i+n))
-        yield (samples,labels,keys)
-        i += self.batch_size
+    lbls = np.zeros([self.batch_size])
+    i = 0
+    while i < (self.get_n_examples() - self.batch_size):
+      mb = self.data[i:i+self.batch_size,:]
+      mb_4 = mb.reshape([self.batch_size,3,32,32])
+      mb_n = self.normalize(mb_4)
+      mb_t = mb_n.transpose([0,2,3,1])
+      dx,dy = np.random.randint(32 - self.crop_size+1, size=2)
+      samples = mb_t[:,dx:dx+self.crop_size,dy:dy+self.crop_size,:]
+      lbls = self.labels[i:i+self.batch_size]
+      keys = self.keys[i:i+self.batch_size]
+      yield (samples,lbls,keys)
+      i += self.batch_size
           
   
   
@@ -390,13 +393,17 @@ if __name__ == "__main__":
   TRANSFORM_PARAM = Object()
   TRANSFORM_PARAM.mean_file = ""
   TRANSFORM_PARAM.mean_value = [127,127,127]
-  TRANSFORM_PARAM.crop_size = 16
+  TRANSFORM_PARAM.crop_size = 32
   TRANSFORM_PARAM.mirror = False
   DATA_PARAM.source = sys.argv[1:]
-  dp = MnistDataProvider(DATA_PARAM,TRANSFORM_PARAM )
-  for d,l,k in dp.get_mb():
+  dp = CifarDataProvider(DATA_PARAM,TRANSFORM_PARAM )
+  dat,l,k = dp.get_mb().next()
+  dat,l,k = dp.get_mb_by_keys(k)
+  im = w2i.display(dp.denormalize(dat))
+  for i in range(0):
+    d = dat[i,:]
     print d.shape
-    plt.imshow(dp.denormalize(d[0,:,:,:].squeeze()))
+    plt.imshow(dp.denormalize(d))
     plt.colorbar()
     plt.show()      
     

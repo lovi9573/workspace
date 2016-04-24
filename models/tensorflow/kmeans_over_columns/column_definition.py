@@ -12,7 +12,7 @@ from autoencoder import *
 DEFAULT_PATIENCE=5
 
 # Improvement threshold to use as "improvement" during pretraining
-DEFAULT_PATIENCE_DELTA=0.002
+DEFAULT_PATIENCE_DELTA=0.01
 
 """
 LAYERS = [
@@ -113,96 +113,60 @@ LAYERS = [
 """
 Mnist setup
 """
+"""
+TODO:
+- Add a setting for training epochs per phase: i.e. pretrain on all data, pretrain on labeled data, pretrain on mapped data, vs the current pretrain_epochs.
+- Add a setting for freezing/thawing per phase
+- Refactor to read encode/decode per layer.  The encode would need to be added to the stack, The decode would be a full decoder definition for that level.
+"""
 LAYERS = [
 # #1
 #           {"Layerdef":CorruptionLayerDef(0.1),
 #            "Train":False},
 #1
-          {"Layerdef":ConvLayerDef(3,1,8,padding='VALID',tied_weights=False ),  #Could go with 4
+          {"Layerdef":ConvLayerDef(7,2,256,padding='VALID',sparsity_target=0.01, sparsity_lr=0,tied_weights=False ),  #Could go with 4
               "Pretrain_epochs":-1,
               "Patience": DEFAULT_PATIENCE,
               "Patience_delta": DEFAULT_PATIENCE_DELTA,
-          }, #out: 29
-#2
-          {"Layerdef":ConvLayerDef(3,1,16,padding='VALID',tied_weights=False), #could go 10
-               "Pretrain_epochs":-1,
-               "Patience": DEFAULT_PATIENCE,
-               "Patience_delta": DEFAULT_PATIENCE_DELTA,
-          }, #out: 27
-#3
-          {"Layerdef":ConvLayerDef(3,1,32,tied_weights=False), 
-               "Pretrain_epochs":-1,
-               "Patience": DEFAULT_PATIENCE,
-               "Patience_delta": DEFAULT_PATIENCE_DELTA,
-          }, #out:25
+          }, #out: 13
+# #2
+#           {"Layerdef":ConvLayerDef(1,1,128,padding='VALID',sparsity_target=0.0, sparsity_lr=0.0,tied_weights=False,activation_function=tf.nn.relu), #could go 10
+#                "Pretrain_epochs":-1,
+#                "Patience": DEFAULT_PATIENCE,
+#                "Patience_delta": DEFAULT_PATIENCE_DELTA,
+#           }, #out: 25
+# #3
+#           {"Layerdef":ConvLayerDef(1,1,128,sparsity_target=0.0, sparsity_lr=0.0,tied_weights=False,activation_function=tf.nn.relu), 
+#                "Pretrain_epochs":-1,
+#                "Patience": DEFAULT_PATIENCE,
+#                "Patience_delta": DEFAULT_PATIENCE_DELTA,
+#           }, #out:25
 #4
-          {"Layerdef":ConvLayerDef(3,1,48,tied_weights=False),
+          {"Layerdef":ConvLayerDef(5,2,512,sparsity_target=0.01, sparsity_lr=0,tied_weights=False),
                "Pretrain_epochs":-1,
                "Patience": DEFAULT_PATIENCE,
                "Patience_delta": DEFAULT_PATIENCE_DELTA,
-          }, #out: 23
+          }, #out: 5
 #5
-          {"Layerdef":ConvLayerDef(3,1,64,padding='VALID',tied_weights=False ),
-              "Pretrain_epochs":-1,
-              "Patience": DEFAULT_PATIENCE*5,
-              "Patience_delta": DEFAULT_PATIENCE_DELTA,
-          }, #out: 21
-#6
-          {"Layerdef":ConvLayerDef(3,1,80,padding='VALID',tied_weights=False),
-               "Pretrain_epochs":-1,
-               "Patience": DEFAULT_PATIENCE,
-               "Patience_delta": DEFAULT_PATIENCE_DELTA,
-          }, #out: 19
+#           {"Layerdef":ConvLayerDef(1,1,256,sparsity_target=0.0, sparsity_lr=0.0,padding='VALID',tied_weights=False,activation_function=tf.nn.relu ),
+#               "Pretrain_epochs":-1,
+#               "Patience": DEFAULT_PATIENCE,
+#               "Patience_delta": DEFAULT_PATIENCE_DELTA,
+#           }, #out: 19
+# #6
+#           {"Layerdef":ConvLayerDef(1,1,256,padding='VALID',sparsity_target=0.0, sparsity_lr=0.0,tied_weights=False,activation_function=tf.nn.relu),
+#                "Pretrain_epochs":-1,
+#                "Patience": DEFAULT_PATIENCE,
+#                "Patience_delta": DEFAULT_PATIENCE_DELTA,
+#           }, #out: 19
 #7
-          {"Layerdef":ConvLayerDef(3,1,96,tied_weights=False), 
+          {"Layerdef":ConvLayerDef(3,1,1024,sparsity_target=0.01, sparsity_lr=0,tied_weights=False), 
                "Pretrain_epochs":-1,
                "Patience": DEFAULT_PATIENCE,
                "Patience_delta": DEFAULT_PATIENCE_DELTA,
-          }, #out:17
-#8
-          {"Layerdef":ConvLayerDef(3,1,128,tied_weights=False),
-               "Pretrain_epochs":-1,
-               "Patience": DEFAULT_PATIENCE,
-               "Patience_delta": DEFAULT_PATIENCE_DELTA,
-          }, #out: 15
+          }, #out:3
 #9
-          {"Layerdef":ConvLayerDef(3,1,160,tied_weights=False), 
-               "Pretrain_epochs":-1,
-               "Patience": DEFAULT_PATIENCE,
-               "Patience_delta": DEFAULT_PATIENCE_DELTA,
-          }, #out:13
-#10
-          {"Layerdef":ConvLayerDef(3,1,192,tied_weights=False),
-               "Pretrain_epochs":-1,
-               "Patience": DEFAULT_PATIENCE*5,
-               "Patience_delta": DEFAULT_PATIENCE_DELTA,
-          }, #out: 11
-#12
-          {"Layerdef":ConvLayerDef(3,1,256,padding='VALID',tied_weights=False ),
-              "Pretrain_epochs":-1,
-              "Patience": DEFAULT_PATIENCE,
-              "Patience_delta": DEFAULT_PATIENCE_DELTA,
-          }, #out: 9
-#13
-          {"Layerdef":ConvLayerDef(3,1,320,padding='VALID',tied_weights=False),
-               "Pretrain_epochs":-1,
-               "Patience": DEFAULT_PATIENCE,
-               "Patience_delta": DEFAULT_PATIENCE_DELTA,
-          }, #out: 7
-#14
-          {"Layerdef":ConvLayerDef(3,1,384,tied_weights=False), 
-               "Pretrain_epochs":-1,
-               "Patience": DEFAULT_PATIENCE*5,
-               "Patience_delta": DEFAULT_PATIENCE_DELTA,
-          }, #out:5
-#15
-          {"Layerdef":ConvLayerDef(3,1,32,tied_weights=False),
-               "Pretrain_epochs":0,
-               "Patience": DEFAULT_PATIENCE,
-               "Patience_delta": DEFAULT_PATIENCE_DELTA,
-          }, #out: 3          
-#9
-          {'Layerdef':FCLayerDef(128,sparsity_target=0.0, sparsity_lr=0.0 , activation_entropy_lr=0.0, tied_weights=False),
+          {'Layerdef':FCLayerDef(1024,sparsity_target=0.0, sparsity_lr=0.0 , activation_entropy_lr=0.0, tied_weights=False),
            "Pretrain_epochs":0,
            "Patience": DEFAULT_PATIENCE,
            "Patience_delta": DEFAULT_PATIENCE_DELTA,
@@ -228,7 +192,7 @@ class Object:
   
   
 DATA_PARAM = Object()
-DATA_PARAM.batch_size = 512
+DATA_PARAM.batch_size = 16
 
 
 TRANSFORM_PARAM = Object()

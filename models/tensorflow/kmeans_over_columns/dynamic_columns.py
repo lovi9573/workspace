@@ -166,6 +166,9 @@ def save_recon(dp, columns, immap):
         d_r_array[1::2,:,:,:] = r
         im = w2i.tile_imgs(d_r_array)
         im.save(IMG_DIR+'col'+str(n)+'_mapped_recon_level'+str(layer_number+1)+'.png')
+        
+def save_injection(dp,columns,immap):
+    for n,column in columns.iteritems():
       #Reconstruct an injected value
       top_shape = column.top_shape()
       a = np.zeros(top_shape)
@@ -188,7 +191,7 @@ def save_top(dp, columns,immap):
       mapped_samples,_,_ = get_mapped_batch(dp, n, immap)
       mapped_batch = np.zeros(dp.shape())
       mapped_batch[0:len(mapped_samples),:] = mapped_samples
-      t = column.fwd(mapped_samples)
+      t = column.fwd(mapped_batch)
       top_shape = column.top_shape()
       if len(top_shape) == 4:
         im = w2i.tile_imgs(t)

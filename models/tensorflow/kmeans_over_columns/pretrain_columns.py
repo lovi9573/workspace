@@ -120,6 +120,7 @@ def train(imap, columns, keys, epochs, epoch_num):
             
 
 def save_recon(dp, column):
+    #Reconstruction of a batch
     d,r = column.recon(dp.get_mb().next()[0])
     s = list(d.shape)
     s[0] = s[0]*2
@@ -128,6 +129,7 @@ def save_recon(dp, column):
     d_r_array[1::2,:,:,:] = r
     im = w2i.tile_imgs(d_r_array)
     im.save(IMG_DIR+'col_pretrain_img_recon_level'+str(layer_number+1)+'.png')
+    #Reconstruction of an injected filter
     top_shape = column.top_shape()
     a = np.zeros(top_shape)
     input_shape = dp.shape()
@@ -211,7 +213,7 @@ if __name__ == '__main__':
         column.add_layer(l['Layerdef'])
         print "{} added".format(l['Layerdef'])
         
-        if l.get('Train',True):
+        if l.get('Train',True) and  l.get('Pretrain_epochs',0) != 0:
           #Pretrain on all data
           if l.get('Pretrain_epochs',0) > 0:
             for i in range(l['Pretrain_epochs']):
@@ -227,10 +229,12 @@ if __name__ == '__main__':
               loss = pretrain_epoch(column, dp, i)
               if (loss - best_loss)/abs(best_loss)  < -l.get("Patience_delta",0.1):
                 patience = 0
-                print("\tAve loss: {} ***".format(loss))
               else:
-                print("\tAve loss: {}".format(loss))
                 patience += 1
+              if loss < best_loss:
+                print("\tAve loss: {} *** {}".format(loss,patience))
+              else:
+                print("\tAve loss: {}     {}".format(loss,patience))
               i += 1
           print "Layer {} trained on all data {} epochs".format(layer_number+1,l.get('Pretrain_epochs',0))
           column.save()

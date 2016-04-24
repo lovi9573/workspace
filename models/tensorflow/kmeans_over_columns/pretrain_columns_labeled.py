@@ -139,10 +139,12 @@ if __name__ == '__main__':
                 loss = pretrain_label(column,data)
                 if (loss - best_loss)/abs(best_loss)  < -l.get("Patience_delta",0.1):
                   patience = 0
-                  print("\tAve loss: {} ***".format(loss))
                 else:
-                  print("\tAve loss: {}".format(loss))
                   patience += 1
+                if loss < best_loss:
+                  print("\tAve loss: {} *** {}".format(loss,patience))
+                else:
+                  print("\tAve loss: {}     {}".format(loss,patience))
                 i += 1
             print "Layer {} trained on all data {} epochs".format(layer_number+1,l.get('Pretrain_epochs',0))
             column.save()

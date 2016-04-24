@@ -28,6 +28,7 @@ class LayerDef():
     self.sparsity_target = params.get('sparsity_target',0.01)
     self.sparsity_lr = params.get('sparsity_lr',0.0)
     self.activation_entropy_lr = params.get('activation_entropy_lr',0.0)
+    self.activation_function = params.get('activation_function',tf.sigmoid)
     
 
 
@@ -295,7 +296,7 @@ class FCLayer(FeedThroughLayer):
                                   tf.zeros([self._indim[-1]]),
                                   name='rev_bias_'+str(self.n))
           flat_in = tf.reshape(self.prev.top(),[self._indim[0],-1])
-          self._top = tf.sigmoid(tf.add(tf.matmul(flat_in,self.W),self.bias))
+          self._top = self.d.activation_function(tf.add(tf.matmul(flat_in,self.W),self.bias))
           if self.next != self:
               self.next.build()
           else:
@@ -319,7 +320,7 @@ class FCLayer(FeedThroughLayer):
     
     def compute_back(self,top):
       with self.g.as_default():
-        return tf.sigmoid(tf.add(tf.reshape(tf.matmul(top,tf.transpose(self.W)),self._indim),self.rev_bias))
+        return self.d.activation_function(tf.add(tf.reshape(tf.matmul(top,tf.transpose(self.W)),self._indim),self.rev_bias))
 
     def params(self):
       return [self.W, self.bias, self.rev_bias]
@@ -360,7 +361,7 @@ class ConvLayer(FeedThroughLayer):
                                  tf.zeros([indim[-1]],
                                           name='rev_bias_'+str(self.n))
                                   )
-          self._top = tf.sigmoid(tf.nn.conv2d(self.prev.top(), self.W, self.d.strides(),self.d._padding, name="Conv_"+str(self.n)+"_top")+self.bias)
+          self._top = self.d.activation_function(tf.nn.conv2d(self.prev.top(), self.W, self.d.strides(),self.d._padding, name="Conv_"+str(self.n)+"_top")+self.bias)
           if self.next != self:
               self.next.build()
           else:
@@ -387,7 +388,7 @@ class ConvLayer(FeedThroughLayer):
         w = self.W
         if not self.d._tied_weights:
           w = self.rev_W
-        return tf.sigmoid(tf.nn.deconv2d(top, tf.transpose(w, [1,0,2,3] ), self.prev.top().get_shape().as_list(), self.d.strides(), padding=self.d._padding)+self.rev_bias)
+        return self.d.activation_function(tf.nn.deconv2d(top, tf.transpose(w, [1,0,2,3] ), self.prev.top().get_shape().as_list(), self.d.strides(), padding=self.d._padding)+self.rev_bias)
           
     def params(self):
       ret =  [self.W,self.bias, self.rev_bias]
@@ -437,6 +438,73 @@ class PoolingLayer(Layer):
 def entropy(a):
   return -tf.mul(a,tf.log(a+0.000001))
 
+"""
+======================================================================================================
+DECODER
+======================================================================================================
+Caution!  This part was thrown together as an afterthought.
+"""
+
+
+class DecoderFCLayerDef(LayerDef):
+    
+    def __init__(self, outdim, **params):
+      LayerDef.__init__(self,params)
+      self._outdim = outdim
+      self._indim = None
+      self._tied_weights = params.get('tied_weights', True)
+      self.output_shape = params.get('output_shape',None)
+        
+    def outdim(self):
+        return self._outdim
+
+    def indim(self):
+        return self._indim
+      
+    def instance(self,g):
+        return FCLayer(g)
+
+    def __str__(self):
+      return "Fully Connected layer with output size {}".format(self._outdim)
+
+class DecoderFCLayer(FeedThroughLayer): 
+        
+    def build(self):
+      '''
+      Constructs the computation graph for this layer and all subsequent layers.
+      '''
+      with self.g.as_default():
+        if self.prev  and self.d and self.prev != self: 
+          self._indim = self.prev.top().get_shape().as_list()
+          inflat = reduce(mul,self._indim[1:])
+          self.W = tf.Variable(
+                               tf.random_uniform([inflat, self.d.outdim()],
+                                                 minval=-4.0*math.sqrt(6.0/(inflat+ self.d.outdim())),
+                                                 maxval=4.0*math.sqrt(6.0/(inflat+ self.d.outdim())),
+                                                 dtype=tf.float32
+                                                 ),
+                               name='Weights_'+str(self.n))
+          self.bias = tf.Variable(
+                                  tf.zeros([self.d.outdim()]),
+                                  name='bias_'+str(self.n))
+          flat_in = tf.reshape(self.prev.top(),[self._indim[0],-1])
+          self._top = tf.reshape(self.d.activation_function(tf.add(tf.matmul(flat_in,self.W),self.bias)), self.d.output_shape)
+
+
+    def inject(self,i):
+      flat_in = tf.reshape(i,[self._indim[0],-1])
+      self._back = tf.reshape(self.d.activation_function(tf.add(tf.matmul(flat_in,self.W),self.bias)), self.d.output_shape)
+        
+               
+    def params(self):
+      return [self.W, self.bias]
+
+
+
+
+
+
+
 class AutoEncoder(object):
     
     def __init__(self,s,g, dp, log_path, checkpoint_path, colnum=-1):
@@ -447,8 +515,8 @@ class AutoEncoder(object):
         self.layers = [DataLayer(self.dp,g)]
         self.bottom_feed = self.layers[0].bottom_feed()
         self.LEARNING_RATE=0.9
-        self.MOMENTUM = 0.2
-        self.alpha = 0.03 # mnist: 0.3
+        self.MOMENTUM = 0.9
+        self.alpha = 0.0 # mnist: 0.3
         self.freeze = False
         self.representation_loss = False
         self.EPS  = 0.0000001
@@ -460,8 +528,8 @@ class AutoEncoder(object):
         
 
     def kl(self,p, p_hat):
-      a = p*tf.log(tf.div(p,p_hat))
-      b = (1-p)*tf.log(tf.div((1-p),(1-p_hat)))
+      a = p*tf.log(tf.div(p,p_hat+self.EPS)+self.EPS)
+      b = (1-p)*tf.log(tf.div((1-p),(1-p_hat+self.EPS))+self.EPS)
       return tf.reduce_mean(a+b)
     
     def cross_entropy(self,p, p_hat):
@@ -512,16 +580,28 @@ class AutoEncoder(object):
         self.layers.append(l)
         l.build()
         
+        #Throw in a makeshift decoder layer
+        self.decoder = DecoderFCLayer(self.g)
+        self.decoder.set_params(
+                                DecoderFCLayerDef(
+                                           reduce(mul,self.bottom_feed.get_shape().as_list()[1:]), output_shape = self.dp.shape(),sparsity_target=0.0, sparsity_lr=0.0 , activation_entropy_lr=0.0, tied_weights=False), 
+                                self.layer_number+100)
+        self.decoder._set_prev(self.layers[-1])
+        self.decoder.build()
+        
         #Reference new layer inputs/outputs
         self._top = self.layers[-1].top()
         self.injection = tf.placeholder(tf.float32, self._top.get_shape().as_list(), "top_data_injection")
-        l.inject(self.injection)
-        self._recon = self.layers[0].recon()
+#         l.inject(self.injection)
+#         self._recon = self.layers[0].recon()
+        self.decoder.inject(self.injection)
+        self._recon = self.decoder.top()
         depth = 1 #min(len(self.layers)-1,10)
         self._rep_recon = self.layers[-depth].recon()
         self._rep_ground_truth = (self.layers[-depth]).prev.truth()
-        self._back = self.layers[0].back()
-        tf.histogram_summary("representation_at_top"+str(self.layer_number), self._rep_ground_truth)
+#         self._back = self.layers[0].back()
+        self._back = self.decoder.back()
+        
         
         #Build loss and optimization functions
         self._per_example_reconstruction_loss = tf.reduce_mean(
@@ -534,38 +614,38 @@ class AutoEncoder(object):
                                                               )
         if self.representation_loss:
           self._loss = tf.reduce_mean(
-                                             -self.cross_entropy(
-                                                                 self._rep_ground_truth ,
+                                             tf.abs(
+                                                                 self._rep_ground_truth -
                                                                  self._rep_recon))
         else:
           self._loss = tf.reduce_mean(
-                                             -self.cross_entropy(
-                                                                 self.bottom_feed ,
+                                             tf.abs(
+                                                                 self.bottom_feed-
                                                                  self._recon))
-        tf.scalar_summary("reconstruction_loss"+str(self.layer_number),self._loss)
+        
         #Sparsity
-        per_channel_mean_activation = tf.reduce_mean(
-                                                     self._top,
-                                                     reduction_indices=range(l.top().get_shape().ndims-1)
-                                                     )
-        tf.histogram_summary("per_channel_mean_activation"+str(self.layer_number) , per_channel_mean_activation)
         if definition.sparsity_lr > 0.0:
+          per_channel_mean_activation = tf.reduce_mean(
+                                                       self._top,
+                                                       reduction_indices=range(l.top().get_shape().ndims-1)
+                                                       )
+          
           sparsity_loss = tf.reduce_mean(
-                                         -self.cross_entropy(
+                                         self.kl(
                                                              definition.sparsity_target,
                                                              per_channel_mean_activation
                                                             )
                                         )
           self._loss += definition.sparsity_lr*sparsity_loss
-          tf.scalar_summary("sparsity_loss"+str(self.layer_number), definition.sparsity_lr*sparsity_loss)
+          
           
         #Activation Entropy
-        per_channel_activation_entropy = tf.reduce_mean(entropy(self._top),reduction_indices=range(l.top().get_shape().ndims-1))
-        tf.histogram_summary("per_channel_activation_entropy_loss"+str(self.layer_number), per_channel_activation_entropy)
         if definition.activation_entropy_lr > 0.0:
+          per_channel_activation_entropy = tf.reduce_mean(entropy(self._top),reduction_indices=range(l.top().get_shape().ndims-1))
+          
           entropy_loss = definition.activation_entropy_lr*tf.reduce_mean(per_channel_activation_entropy)
           self._loss += entropy_loss
-          tf.scalar_summary("activation_entropy_loss"+str(self.layer_number), entropy_loss)
+          
           
         #Parameter groups
         newparameters=self.layers[-1].params()
@@ -584,6 +664,11 @@ class AutoEncoder(object):
           print("No Checkpoint found for layer {}".format(str(self.layer_number)))
           uninitializedparameters=newparameters
         
+        #Parameter groups hack for decoder
+        newparameters += self.decoder.params()
+        uninitializedparameters += self.decoder.params()
+        trainableparameters += self.decoder.params()
+        self._loss += 0.0000001*reduce(add, [tf.reduce_sum(tf.abs(p)) for p in self.decoder.params()])
         
         #Weight Decay
         if self.alpha >0 and len(trainableparameters) > 0:
@@ -595,8 +680,7 @@ class AutoEncoder(object):
         if len(trainableparameters) > 0:
           self.optimizer = tf.train.MomentumOptimizer(self.LEARNING_RATE,self.MOMENTUM,use_locking=True)
           self.optimizer_objective = self.optimizer.minimize(self._loss, var_list=trainableparameters)
-          self.writer = tf.train.SummaryWriter(self.log_path,self.s.graph_def)
-          summarylist = [tf.histogram_summary(str(self.layer_number)+"_"+p.name,p) for i,p in enumerate(trainableparameters)]
+
           optimizer_slots = [x  for x in [self.optimizer.get_slot(v,n) for v in trainableparameters for n in self.optimizer.get_slot_names()] if x != None]
           implicitparameters += optimizer_slots
           uninitializedparameters += optimizer_slots
@@ -606,6 +690,17 @@ class AutoEncoder(object):
           print("WARNING: No optimizer parameters for layer {}.".format(str(self.layer_number)))
   #       tf.train.SummaryWriter.add_graph(self.s.graph_def, self.layer_number)
         if self.summarize:
+          tf.histogram_summary("representation_at_top"+str(self.layer_number), self._rep_ground_truth)
+          tf.scalar_summary("reconstruction_loss"+str(self.layer_number),self._loss)
+          if definition.sparsity_lr > 0.0:
+            tf.histogram_summary("per_channel_mean_activation"+str(self.layer_number) , per_channel_mean_activation)
+            tf.scalar_summary("sparsity_loss"+str(self.layer_number), definition.sparsity_lr*sparsity_loss)
+          if definition.activation_entropy_lr > 0.0:
+            tf.histogram_summary("per_channel_activation_entropy_loss"+str(self.layer_number), per_channel_activation_entropy)
+            tf.scalar_summary("activation_entropy_loss"+str(self.layer_number), entropy_loss)
+          if len(trainableparameters) > 0:
+            self.writer = tf.train.SummaryWriter(self.log_path,self.s.graph_def)
+            summarylist = [tf.histogram_summary(str(self.layer_number)+"_"+p.name,p) for i,p in enumerate(trainableparameters)]            
           self. summaries = tf.merge_all_summaries()
   
     def top_shape(self):

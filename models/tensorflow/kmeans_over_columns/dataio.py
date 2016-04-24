@@ -241,6 +241,9 @@ class CifarDataProvider:
     self.mirror = transform_param.mirror
     self._dat = {"filename":""}
     self.cache_data()
+    self.data = self.normalize(self.data)
+    self.data = self.data.reshape([-1,3,32,32])
+    self.data = self.data.transpose([0,2,3,1])
 
   def cache_data(self):
     self.data = None
@@ -279,12 +282,12 @@ class CifarDataProvider:
     sorted_keys = sorted(keys)
     for n,key in enumerate(sorted_keys):
       i = self.keys.index(key)
-      mb = self.data[i,:]
-      mb_4 = mb.reshape([1,3,32,32])
-      mb_n = self.normalize(mb_4)
-      mb_t = mb_n.transpose([0,2,3,1])
+      mb = self.data[i,:,:,:]
+#       mb_4 = mb.reshape([1,3,32,32])
+#       mb_n = self.normalize(mb_4)
+#       mb_t = mb_4.transpose([0,2,3,1])
       dx,dy = np.random.randint(32 - self.crop_size+1, size=2)
-      samples[n,:] = mb_t[:,dx:dx+self.crop_size,dy:dy+self.crop_size,:]
+      samples[n,:,:,:] = mb[dx:dx+self.crop_size,dy:dy+self.crop_size,:]
       labels[n] = self.labels[i]
     return (samples,labels,keys)
     
@@ -295,11 +298,11 @@ class CifarDataProvider:
     i = 0
     while i < (self.get_n_examples() - self.batch_size):
       mb = self.data[i:i+self.batch_size,:]
-      mb_4 = mb.reshape([self.batch_size,3,32,32])
-      mb_n = self.normalize(mb_4)
-      mb_t = mb_n.transpose([0,2,3,1])
+#       mb_4 = mb.reshape([self.batch_size,3,32,32])
+#       mb_n = self.normalize(mb_4)
+#       mb_t = mb_4.transpose([0,2,3,1])
       dx,dy = np.random.randint(32 - self.crop_size+1, size=2)
-      samples = mb_t[:,dx:dx+self.crop_size,dy:dy+self.crop_size,:]
+      samples = mb[:,dx:dx+self.crop_size,dy:dy+self.crop_size,:]
       lbls = self.labels[i:i+self.batch_size]
       keys = self.keys[i:i+self.batch_size]
       yield (samples,lbls,keys)

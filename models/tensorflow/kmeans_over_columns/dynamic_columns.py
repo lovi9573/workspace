@@ -79,34 +79,6 @@ def map_img_2_col(columns):
   #print "Mapping Stats: ",stats
   return {'key2col':key2col, 'n_examples':col2key_count, "col2key":col2keys}
 
-# def encode(imap, columns, epochs, epoch_num):
-#     datas = [np.zeros(dp.shape()) for i in columns]
-#     indicies = [0 for i in columns]
-#     max_examples = max(imap['n_examples'])
-#     if min(imap['n_examples']) == 0:
-#       max_examples = DATA_PARAM.batch_size
-#     n_updates = max_examples/DATA_PARAM.batch_size
-#     report = ["\tTraining column {} on {} examples\n".format(col,len(k)) for col,k in imap['col2key'].iteritems()]
-#     print(''.join(report))
-#     for e in range(epoch_num,epoch_num+epochs):
-#         print "Epoch: {}".format(e)
-#         for mb in dp.get_mb():
-#             #print len(mb)
-#             for i in range(len(mb[2])):
-#                 dat,label,tag = (mb[0][i], mb[1][i], mb[2][i])
-#                 colnum = imap['key2col'][tag]
-#                 datas[colnum][indicies[colnum],:] = dat
-#                 indicies[colnum] += 1
-#                 if indicies[colnum] == DATA_PARAM.batch_size:
-#                     columns[colnum].encode_mb(datas[colnum])
-#                     indicies[colnum] = 0
-#                 for colnum,stat in imap['n_examples'].iteritems():
-#                   if stat == 0:
-#                     datas[colnum][indicies[colnum],:] = dat
-#                     indicies[colnum] += 1
-#                     if indicies[colnum] == DATA_PARAM.batch_size:
-#                       columns[colnum].encode_mb(datas[colnum])
-#                       indicies[colnum] = 0
  
 def train(imap, columns, keys, batches):
     """
@@ -118,8 +90,7 @@ def train(imap, columns, keys, batches):
     @param: imap  The image to column mapping structure
     @param: columns A list of columns
     @param: keys The list of image keys
-    @param: epochs The number of epochs to train on 
-    @param: epoch_num The epoch number for print output
+    @param: batches The number of batches to train on 
     
     @return: A dictionary of columns to average loss over the training epochs.
     """
@@ -140,7 +111,7 @@ def train(imap, columns, keys, batches):
           per_column_batch_key_index[colnum] += DATA_PARAM.batch_size
           s,l,k = dp.get_mb_by_keys(batch_keys)
           #print("\tTraining column {} on {} keys".format(colnum,len(batch_keys)))
-          losses[colnum] += columns[colnum].encode_mb(s)
+          losses[colnum] += columns[colnum].train_mb(s)
     return losses            
 
 def get_mapped_batch(dp, column_num, immap):
@@ -158,7 +129,7 @@ def save_recon(dp, columns, immap):
       #Reconstruct mapped examples
       mapped_samples,_,_ = get_mapped_batch(dp, n, immap)
       if len(mapped_samples) == dp.shape()[0]:
-        d,r = column.recon(mapped_samples)
+        d,r = column.fwd_back(mapped_samples)
         s = list(d.shape)
         s[0] = s[0]*2
         d_r_array = np.empty(s,dtype=d.dtype)
@@ -229,7 +200,7 @@ def pretrain_epoch(columns,dp, i):
     for mb in dp.get_mb():
       n += 1
       for colnum,column in columns.iteritems():
-        losses[colnum] += column.encode_mb(mb[0])
+        losses[colnum] += column.train_mb(mb[0])
     losses = dict([(col,v/n) for col,v in losses.iteritems()])
     return losses
   
@@ -242,7 +213,7 @@ def save_embedding(column,dp):
   i = 0
   mb_size = dp.shape()[0]
   for mb in dp.get_mb():
-    embedding[i:i+mb_size,:] = column.encode_mb(mb[0])
+    embedding[i:i+mb_size,:] = column.fwd(mb[0])
     labels[i:i+mb_size] = mb[1]
   np.save(path.join(CHECKPOINT_DIR,"embedding"), embedding)
   np.save(path.join(CHECKPOINT_DIR,"embedding_labels"), labels)
@@ -347,7 +318,9 @@ if __name__ == '__main__':
       #Iterate over layer definitions to build a column
       for layer_number,l in enumerate(LAYERS):
         for column in columns.values():
-          column.add_layer(l['Layerdef'])
+          column.add_layer(l['Layerdef'], l.get('Mapped',{}).get('Freeze',True))
+          column.set_decode(l['Decodedef'])
+          column.build()
         print "{} added".format(l['Layerdef'])
         
         if l.get('Use_To_Map_Samples',False):

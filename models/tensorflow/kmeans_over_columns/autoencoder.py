@@ -49,8 +49,8 @@ class FCLayerDef(LayerDef):
     def indim(self):
         return self._indim
       
-    def instance(self,g,uid):
-        return FCLayer(self,g,uid)
+    def instance(self,g,uid, freeze):
+        return FCLayer(self,g,uid, freeze)
 
     def __str__(self):
       return "Fully Connected layer with output size {}".format(self._outdim)
@@ -79,8 +79,8 @@ class ConvLayerDef(LayerDef):
     def strides(self):
         return [1,self._stride,self._stride,1]
       
-    def instance(self, g, uid):
-        return ConvLayer(self,g,uid)
+    def instance(self, g, uid, freeze):
+        return ConvLayer(self,g,uid, freeze)
       
     def recon_shape(self):
       return self._recon_shape
@@ -96,8 +96,8 @@ class CorruptionLayerDef(LayerDef):
     def corruptionlevel(self):
       return self._corruptionlevel
       
-    def instance(self, g, uid):
-        return CorruptionLayer(self,g,uid)
+    def instance(self, g, uid, freeze):
+        return CorruptionLayer(self,g,uid, freeze)
   
     def __str__(self):
       return "Corruption layer at p({})".format(self._corruptionlevel)
@@ -106,7 +106,7 @@ class FeedThroughLayerDef(LayerDef):
     def __init__(self, **params):
       LayerDef.__init__(self,params)
       
-    def instance(self,g,uid):
+    def instance(self,g,uid, freeze):
         return FeedThroughLayer(self)
   
     def __str__(self):
@@ -155,7 +155,7 @@ class DataLayer(Layer):
  
 class FeedThroughLayer(Layer):
     
-  def __init__(self,d,g,uid):
+  def __init__(self,d,g,uid, freeze):
       self.g = g
       self._bottom = None
       self._top = None
@@ -165,6 +165,7 @@ class FeedThroughLayer(Layer):
       self._inject_recon = None
       self.d = d
       self._uid = uid
+      self._freeze = freeze
       self._params = []
       
   def set_bottom(self,l):
@@ -207,6 +208,9 @@ class FeedThroughLayer(Layer):
   
   def uid(self):
     return self._uid 
+  
+  def freeze(self):
+    return self._freeze
   
   def __str__(self):
     return self.d.__str__() 
@@ -417,7 +421,7 @@ class AutoEncoder(object):
         self.LEARNING_RATE=0.9
         self.MOMENTUM = 0.9
         self.ALPHA = 0.1 # mnist: 0.3
-        self.freeze = True
+        self.freeze = False
         self.summaryid = 0
         self.summarize = False
         self.isDecoderValid = False
@@ -457,25 +461,27 @@ class AutoEncoder(object):
         else:
           return False
 
-    def add_layer(self,definition):
+    def add_layer(self,definition, freeze=True):
       with self.g.as_default():
         self.save()
         #Get hyperparameters
         self.layeruid+=1
         
         #Insert into stack
-        l = definition.instance(self.g, self.layeruid)
+        l = definition.instance(self.g, self.layeruid, freeze)
         l.set_bottom(self.encode_layers[-1].get_top())
         self.encode_layers.append(l)
         l.build_fwd()
         self._top = self.encode_layers[-1].get_top()
         self.isDecoderValid = False
+
+        
         
         
     def set_decode(self, decode_layerdefs):
       with self.g.as_default():
         #establish first decoder layer
-        l = decode_layerdefs[0].instance(self.g,str(self.layeruid)+"_"+str(1))
+        l = decode_layerdefs[0].instance(self.g,str(self.layeruid)+"_"+str(1), False)
         #tie top of encoder and top of injection path to decoder layer 1
         self.decode_layers.append(l)
         self.injection = tf.placeholder(tf.float32, self._top.get_shape().as_list(), "top_data_injection")

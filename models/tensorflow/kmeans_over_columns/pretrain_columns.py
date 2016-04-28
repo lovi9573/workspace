@@ -54,26 +54,27 @@ if __name__ == '__main__':
       
       #Iterate over layer definitions to greedy train a column
       for layer_number,l in enumerate(LAYERS):
-        column.add_layer(l['Layerdef'])
+        column.add_layer(l['Layerdef'],l.get('All',{}).get('Freeze',True) )
         column.set_decode(l['Decodedef'])
         column.build()
         print "{} added".format(l['Layerdef'])
         
-        if l.get('Train',True) and  l.get('Pretrain_all',0) != 0:
+        l_params = l.get('All',{})
+        if l.get('Train',True) and  l_params.get('N_epochs',0) != 0:
           #Pretrain on all data
-          if l.get('Pretrain_all',0) > 0:
-            for i in range(l['Pretrain_all']):
+          if l_params.get('N_epochs',0) > 0:
+            for i in range(l_params.get('N_epochs',0)):
               loss = pretrain_epoch(column, dp, i)
               print("\tAve loss: {}".format(loss))
-          elif l.get('Pretrain_all',0) == -1:
+          elif l_params.get('N_epochs',0) == -1:
             loss = 100
             best_loss = loss
             patience = 0
             i = 0
-            while patience < l.get("Patience",0):
+            while patience < l_params.get("Patience",0):
               best_loss = min(best_loss,loss)
               loss = pretrain_epoch(column, dp, i)
-              if (loss - best_loss)/abs(best_loss)  < -l.get("Patience_delta",0.1):
+              if (loss - best_loss)/abs(best_loss)  < -l_params.get("Patience_delta",0.1):
                 patience = 0
               else:
                 patience += 1
@@ -82,7 +83,7 @@ if __name__ == '__main__':
               else:
                 print("\tAve loss: {}     {}".format(loss,patience))
               i += 1
-          print "Layer {} trained on all data {} epochs".format(layer_number+1,l.get('Pretrain_epochs',0))
+          print "Layer {} trained on all data {} epochs".format(layer_number+1,l_params.get('N_epochs',0))
           column.save()
           with open(path.join(IMG_DIR,"col_pretrain_losses".format(layer_number)),"a") as fout:
             fout.write(str(layer_number)+": "+str(loss)+"\n")

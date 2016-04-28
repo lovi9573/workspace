@@ -59,8 +59,6 @@ def save_embedding(column,dp,uid, save_path):
   np.save(path.join(save_path,"embedding_level"+str(uid)), embedding)
   np.save(path.join(save_path,"embedding_labels_level"+str(uid)), labels)
     
-    
-    
 def get_label_batch(dp,label,n):
   data = np.zeros(dp.shape())
   examples_found = 0

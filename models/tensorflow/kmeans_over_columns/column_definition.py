@@ -114,11 +114,18 @@ LAYERS = [
 #1
           {"Layerdef":ConvLayerDef(7,2,64,padding='VALID',sparsity_target=0.01, sparsity_lr=0,tied_weights=False ),  #Could go with 4
            "Decodedef":[ConvLayerDef(7,2,3,padding='VALID', recon_shape=RECON_SHAPE,sparsity_target=0.01, sparsity_lr=0,tied_weights=False )],
-           "Pretrain_all":-1,
-           "Pretrain_labeled":0,
-           "Pretrain_mapped":0,
-           "Patience": DEFAULT_PATIENCE,
-           "Patience_delta": DEFAULT_PATIENCE_DELTA,
+           "All":{"N_epochs":-1,
+                  "Patience":DEFAULT_PATIENCE,
+                  "Patience_delta":DEFAULT_PATIENCE_DELTA,
+                  "Freeze":True},
+           "Labeled":{"N_epochs":0,
+                  "Patience":DEFAULT_PATIENCE,
+                  "Patience_delta":DEFAULT_PATIENCE_DELTA,
+                  "Freeze":True},
+           "Mapped":{"N_epochs":0,
+                  "Patience":DEFAULT_PATIENCE,
+                  "Patience_delta":DEFAULT_PATIENCE_DELTA,
+                  "Freeze":False},
           }, #out: 13
 # #2
 #           {"Layerdef":ConvLayerDef(1,1,128,padding='VALID',sparsity_target=0.0, sparsity_lr=0.0,tied_weights=False,activation_function=tf.nn.relu), #could go 10
@@ -133,13 +140,20 @@ LAYERS = [
 #                "Patience_delta": DEFAULT_PATIENCE_DELTA,
 #           }, #out:25
 #4
-          {"Layerdef":ConvLayerDef(5,2,256,padding='VALID',sparsity_target=0.01, sparsity_lr=0,tied_weights=False),
+          {"Layerdef":ConvLayerDef(5,2,128,padding='VALID',sparsity_target=0.01, sparsity_lr=0,tied_weights=False),
            "Decodedef":[ConvLayerDef(15,4,3,padding='VALID', recon_shape=RECON_SHAPE,sparsity_target=0.01, sparsity_lr=0,tied_weights=False )],
-           "Pretrain_all":-1,
-           "Pretrain_labeled":0,
-           "Pretrain_mapped":-1,
-           "Patience": DEFAULT_PATIENCE,
-           "Patience_delta": DEFAULT_PATIENCE_DELTA,
+           "All":{"N_epochs":0,
+                  "Patience":DEFAULT_PATIENCE,
+                  "Patience_delta":DEFAULT_PATIENCE_DELTA,
+                  "Freeze":True},
+           "Labeled":{"N_epochs":-1,
+                  "Patience":DEFAULT_PATIENCE,
+                  "Patience_delta":DEFAULT_PATIENCE_DELTA,
+                  "Freeze":False},
+           "Mapped":{"N_epochs":0,
+                  "Patience":DEFAULT_PATIENCE,
+                  "Patience_delta":DEFAULT_PATIENCE_DELTA,
+                  "Freeze":False},
           }, #out: 5
 #5
 #           {"Layerdef":ConvLayerDef(1,1,256,sparsity_target=0.0, sparsity_lr=0.0,padding='VALID',tied_weights=False,activation_function=tf.nn.relu ),
@@ -154,13 +168,22 @@ LAYERS = [
 #                "Patience_delta": DEFAULT_PATIENCE_DELTA,
 #           }, #out: 19
 #7
-          {"Layerdef":ConvLayerDef(3,1,128,padding='VALID',sparsity_target=0.01, sparsity_lr=0,tied_weights=False),
+          {"Layerdef":ConvLayerDef(3,1,64,padding='VALID',sparsity_target=0.01, sparsity_lr=0,tied_weights=False),
            "Decodedef":[ConvLayerDef(23,4,3,padding='VALID', recon_shape=RECON_SHAPE,sparsity_target=0.01, sparsity_lr=0,tied_weights=False )], 
-           "Pretrain_all":0,
-           "Pretrain_labeled":-1,
-           "Pretrain_mapped":-1,
-           "Patience": DEFAULT_PATIENCE,
-           "Patience_delta": DEFAULT_PATIENCE_DELTA,
+           "All":{"N_epochs":0,
+                  "Patience":DEFAULT_PATIENCE,
+                  "Patience_delta":DEFAULT_PATIENCE_DELTA,
+                  "Freeze":True},
+           "Labeled":{"N_epochs":-1,
+                  "Patience":DEFAULT_PATIENCE,
+                  "Patience_delta":DEFAULT_PATIENCE_DELTA,
+                  "Freeze":False},
+           "Mapped":{"N_epochs":-1,
+                  "Patience":DEFAULT_PATIENCE,
+                  "Patience_delta":DEFAULT_PATIENCE_DELTA,
+                  "Freeze":False},
+           'Use_To_Map_Samples':True,
+           "Convergence_threshold":0.95
           }, #out:3
 #9
 #           {'Layerdef':FCLayerDef(1024,sparsity_target=0.0, sparsity_lr=0.0 , activation_entropy_lr=0.0, tied_weights=False),

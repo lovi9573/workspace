@@ -425,7 +425,16 @@ class AutoEncoder(object):
         self.summaryid = 0
         self.summarize = False
         self.isDecoderValid = False
-        
+
+    def get_checkpoint_file(self,coluid=0,layeruid=0,encode=True):
+      prefix = ''
+      suffix = '_encode'
+      if coluid >=0:
+        prefix = 'col'+str(self.coluid)+"_"
+      if not encode:
+        suffix = '_decode'
+      file = path.join(self.checkpoint_path,prefix+'layer'+str(layeruid)+"_encode")
+      return file
 
     
     def save(self):
@@ -436,28 +445,35 @@ class AutoEncoder(object):
           parameterlayers = self.encode_layers
         for layer in parameterlayers:
           params = [w for w in layer.params()]
-          #tack the decode variable onto the last encode layer
-          if layer == self.encode_layers[-1]:
-            params += [w for dl in self.decode_layers for w in dl.params()]
           if len(params) != 0:
             saver = tf.train.Saver(params)
-            prefix = ''
-            if self.coluid >=0:
-              prefix = 'col'+str(self.coluid)+"_"
-            saver.save(self.s,path.join(self.checkpoint_path,prefix+'layer'+str(layer.uid())))
-     
+            savefile = self.get_checkpoint_file(self.coluid, layer.uid(),True)
+            saver.save(self.s,savefile)
+            print("[NOTE] Autoencoder saving parameters\n\t {}\n\tIn file {}".format([p.name for p in params],savefile ))
+        #Save the decode variables
+        params = [w for dl in self.decode_layers for w in dl.params()]
+        if len(params) != 0:
+          saver = tf.train.Saver(params)
+          savefile = self.get_checkpoint_file(self.coluid, layer.uid(),False)
+          saver.save(self.s,savefile)
+          print("[NOTE] Autoencoder saving parameters\n\t {}\n\tIn file {}".format([p.name for p in params],savefile ))        
+ 
+ 
+#TODO: Need to restore the parameters encode/decode from separate files, thus they should be passed in separate lists.     
     def restore(self, params):
       with self.g.as_default():
         if len(params) == 0:
           return False
 #         paramsdict = {w.name.strip(":[0..9]+"):w for w in params}
         saver = tf.train.Saver(params)
-        if os.path.isfile(path.join(self.checkpoint_path,'col'+str(self.coluid)+"_"+'layer'+str(self.layeruid))):
-          saver.restore(self.s,path.join(self.checkpoint_path,'col'+str(self.coluid)+"_"+'layer'+str(self.layeruid)))
-          return path.join(self.checkpoint_path,'col'+str(self.coluid)+"_"+'layer'+str(self.layeruid))
-        elif os.path.isfile(path.join(self.checkpoint_path,'layer'+str(self.layeruid))):
-          saver.restore(self.s,path.join(self.checkpoint_path,'layer'+str(self.layeruid)))
-          return path.join(self.checkpoint_path,'layer'+str(self.layeruid))
+        column_specific_file = self.get_checkpoint_file(self.coluid, self.layeruid, True)
+        general_file = self.get_checkpoint_file(-1, self.layeruid, True)
+        if os.path.isfile(column_specific_file):
+          saver.restore(self.s,column_specific_file)
+          return column_specific_file
+        elif os.path.isfile(general_file):
+          saver.restore(self.s,general_file)
+          return general_file
         else:
           return False
 

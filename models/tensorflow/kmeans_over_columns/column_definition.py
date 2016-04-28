@@ -12,7 +12,7 @@ from autoencoder import *
 DEFAULT_PATIENCE=5
 
 # Improvement threshold to use as "improvement" during pretraining
-DEFAULT_PATIENCE_DELTA=0.001
+DEFAULT_PATIENCE_DELTA=0.01
 
 
 
@@ -112,7 +112,7 @@ LAYERS = [
 #           {"Layerdef":CorruptionLayerDef(0.1),
 #            "Train":False},
 #1
-          {"Layerdef":ConvLayerDef(7,2,64,padding='VALID',sparsity_target=0.01, sparsity_lr=0,tied_weights=False ),  #Could go with 4
+          {"Layerdef":ConvLayerDef(7,2,128,padding='VALID',sparsity_target=0.01, sparsity_lr=0,tied_weights=False ),  #Could go with 4
            "Decodedef":[ConvLayerDef(7,2,3,padding='VALID', recon_shape=RECON_SHAPE,sparsity_target=0.01, sparsity_lr=0,tied_weights=False )],
            "All":{"N_epochs":-1,
                   "Patience":DEFAULT_PATIENCE,
@@ -140,7 +140,7 @@ LAYERS = [
 #                "Patience_delta": DEFAULT_PATIENCE_DELTA,
 #           }, #out:25
 #4
-          {"Layerdef":ConvLayerDef(5,2,128,padding='VALID',sparsity_target=0.01, sparsity_lr=0,tied_weights=False),
+          {"Layerdef":ConvLayerDef(5,2,64,padding='VALID',sparsity_target=0.01, sparsity_lr=0,tied_weights=False),
            "Decodedef":[ConvLayerDef(15,4,3,padding='VALID', recon_shape=RECON_SHAPE,sparsity_target=0.01, sparsity_lr=0,tied_weights=False )],
            "All":{"N_epochs":0,
                   "Patience":DEFAULT_PATIENCE,

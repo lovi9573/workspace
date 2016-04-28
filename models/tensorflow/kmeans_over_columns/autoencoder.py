@@ -433,7 +433,7 @@ class AutoEncoder(object):
         prefix = 'col'+str(self.coluid)+"_"
       if not encode:
         suffix = '_decode'
-      file = path.join(self.checkpoint_path,prefix+'layer'+str(layeruid)+"_encode")
+      file = path.join(self.checkpoint_path,prefix+'layer'+str(layeruid)+suffix)
       return file
 
     
@@ -460,22 +460,22 @@ class AutoEncoder(object):
  
  
 #TODO: Need to restore the parameters encode/decode from separate files, thus they should be passed in separate lists.     
-    def restore(self, params):
+    def restore(self, encodeparams, decodeparams):
+      restorefiles = [None, None]
       with self.g.as_default():
-        if len(params) == 0:
-          return False
-#         paramsdict = {w.name.strip(":[0..9]+"):w for w in params}
-        saver = tf.train.Saver(params)
-        column_specific_file = self.get_checkpoint_file(self.coluid, self.layeruid, True)
-        general_file = self.get_checkpoint_file(-1, self.layeruid, True)
-        if os.path.isfile(column_specific_file):
-          saver.restore(self.s,column_specific_file)
-          return column_specific_file
-        elif os.path.isfile(general_file):
-          saver.restore(self.s,general_file)
-          return general_file
-        else:
-          return False
+        for params,encoder, i in zip((encodeparams,decodeparams), (True, False),(0,1)):
+          if len(params) > 0:
+                #         paramsdict = {w.name.strip(":[0..9]+"):w for w in params}
+            saver = tf.train.Saver(params)
+            column_specific_file = self.get_checkpoint_file(self.coluid, self.layeruid, encoder)
+            general_file = self.get_checkpoint_file(-1, self.layeruid, encoder)
+            if os.path.isfile(column_specific_file):
+              saver.restore(self.s,column_specific_file)
+              restorefiles[i] = column_specific_file
+            elif os.path.isfile(general_file):
+              saver.restore(self.s,general_file)
+              restorefiles[i] = general_file
+      return restorefiles
 
     def add_layer(self,definition, freeze=True):
       with self.g.as_default():
@@ -559,21 +559,29 @@ class AutoEncoder(object):
           
           
         #Parameter groups
-        newparameters=self.encode_layers[-1].params()+[ p for dl in self.decode_layers for p in dl.params() ]
+        newencodeparameters=self.encode_layers[-1].params()
+        newdecodeparameters = [ p for dl in self.decode_layers for p in dl.params() ]
+        newparameters = newencodeparameters+newdecodeparameters
         existingparameters=[w for l in self.encode_layers[0:-1] for w in l.params()]
         if self.freeze:
           trainableparameters=newparameters
         else:
           trainableparameters=newparameters+existingparameters
         implicitparameters=[]
+        
         #Restore from checkpoint or Initialize new Variables
-        restore_file =  self.restore(newparameters)
-        if restore_file:
-          uninitializedparameters=[]
-          print("Layer {} and decoder restored from checkpoint {}".format(str(self.layeruid), restore_file))
+        uninitializedparameters=[]
+        encode_restore, decode_restore =  self.restore(newencodeparameters, newdecodeparameters)
+        if encode_restore:
+          print("Layer {} encoder restored from checkpoint {}".format(str(self.layeruid), encode_restore))
         else:
-          print("No Checkpoint found for layer {}".format(str(self.layeruid)))
-          uninitializedparameters=newparameters
+          print("No Checkpoint found for layer {} encoder".format(str(self.layeruid)))
+          uninitializedparameters+=newencodeparameters
+        if decode_restore:
+          print("Layer {} decoder restored from checkpoint {}".format(str(self.layeruid), decode_restore))
+        else:
+          print("No Checkpoint found for layer {} decoder".format(str(self.layeruid)))
+          uninitializedparameters+=newdecodeparameters        
         
         #Weight Decay
         if self.ALPHA >0 and len(trainableparameters) > 0:

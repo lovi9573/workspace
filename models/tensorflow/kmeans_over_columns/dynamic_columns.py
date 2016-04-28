@@ -13,7 +13,6 @@ import numpy as np
 import tensorflow as tf
 from weights_to_img import display
 from itertools import islice, cycle
-from dnf.cli.output import Output
 from PIL import Image
 import math
 import weights_to_img as w2i

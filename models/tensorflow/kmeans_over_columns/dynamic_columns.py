@@ -25,10 +25,10 @@ from column_definition import LAYERS,DATA_PARAM,TRANSFORM_PARAM,NUM_LABELS
 N_COLUMNS = 10
 
 # Number of batches to train between data reroute's
-TRAIN_BATCHES = 1
+TRAIN_BATCHES = 20
 
 # Growth rate for TRAIN_BATCHES every training cycle
-D_TRAIN_BATCHES = 2
+D_TRAIN_BATCHES = 1
 
 
 
@@ -159,6 +159,8 @@ def save_injection(dp,columns,immap):
 def save_top(dp, columns,immap):
     for n,column in columns.iteritems():
       mapped_samples,_,_ = get_mapped_batch(dp, n, immap)
+      if len(mapped_samples) == 0:
+        return
       mapped_batch = np.zeros(dp.shape())
       mapped_batch[0:len(mapped_samples),:] = mapped_samples
       t = column.fwd(mapped_batch)
@@ -331,14 +333,14 @@ if __name__ == '__main__':
           epoch_num = 0
           n_batches = TRAIN_BATCHES
           stationary_mapping = False
-          while(not stationary_mapping and epoch_num < 5):
+          while(not stationary_mapping ):
             print("========= Epoch {} ========".format(epoch_num))
             print("Mapping Distribution " + str(immap['n_examples']))
             loss = train(immap, columns, imgkeys, n_batches)
             print("Encoding loss on mapped examples {}").format(loss)
 
             epoch_num += n_batches*(float(dp.shape()[0])/dp.get_n_examples())
-            n_batches *= D_TRAIN_BATCHES
+            n_batches += D_TRAIN_BATCHES
             immap_old = immap
             immap = map_img_2_col(columns)
             stationary_mapping,stationary_rate = stationary(immap['key2col'], immap_old['key2col'], l.get('Convergence_threshold',0.0))

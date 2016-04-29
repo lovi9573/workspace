@@ -12,7 +12,7 @@ from autoencoder import *
 DEFAULT_PATIENCE=5
 
 # Improvement threshold to use as "improvement" during pretraining
-DEFAULT_PATIENCE_DELTA=0.0001
+DEFAULT_PATIENCE_DELTA=0.001
 
 
 
@@ -182,17 +182,26 @@ LAYERS = [
                   "Patience":DEFAULT_PATIENCE,
                   "Patience_delta":DEFAULT_PATIENCE_DELTA,
                   "Freeze":False},
-           'Use_To_Map_Samples':True,
-           "Convergence_threshold":0.95
           }, #out:3
-#9
-#           {'Layerdef':FCLayerDef(1024,sparsity_target=0.0, sparsity_lr=0.0 , activation_entropy_lr=0.0, tied_weights=False),
-#            "Pretrain_all":0,
-#            "Patience": DEFAULT_PATIENCE,
-#            "Patience_delta": DEFAULT_PATIENCE_DELTA,
-#            'Use_To_Map_Samples':True,
-#            "Convergence_threshold":0.95
-#            },
+#TODO: implement this for FC layer
+          {'Layerdef':FCLayerDef(1024,sparsity_target=0.0, sparsity_lr=0.0 , activation_entropy_lr=0.0, tied_weights=False),
+           "Decodedef":[FCLayerDef(512,padding='VALID', recon_shape=RECON_SHAPE,sparsity_target=0.01, sparsity_lr=0,tied_weights=False ),
+                        ConvLayerDef(7,2,3,padding='VALID', recon_shape=RECON_SHAPE,sparsity_target=0.01, sparsity_lr=0,tied_weights=False )], 
+           "All":{"N_epochs":-1,
+                  "Patience":DEFAULT_PATIENCE,
+                  "Patience_delta":DEFAULT_PATIENCE_DELTA,
+                  "Freeze":False},
+           "Labeled":{"N_epochs":-1,
+                  "Patience":DEFAULT_PATIENCE,
+                  "Patience_delta":DEFAULT_PATIENCE_DELTA,
+                  "Freeze":False},
+           "Mapped":{"N_epochs":-1,
+                  "Patience":DEFAULT_PATIENCE,
+                  "Patience_delta":DEFAULT_PATIENCE_DELTA,
+                  "Freeze":False},
+           'Use_To_Map_Samples':True,
+           "Convergence_threshold":0.9
+           }
 #           {"Layerdef":ConvLayerDef(3,1,32,sparsity_target=0.03, sparsity_lr=0.1),
 #                "Pretrain_all":-1,
 #                "Patience": 5,

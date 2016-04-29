@@ -150,6 +150,9 @@ class DataLayer(Layer):
   
   def params(self):
     return []
+  
+  def freeze(self):
+    return True
  
 
  
@@ -459,7 +462,6 @@ class AutoEncoder(object):
           print("[NOTE] Autoencoder saving parameters\n\t {}\n\tIn file {}".format([p.name for p in params],savefile ))        
  
  
-#TODO: Need to restore the parameters encode/decode from separate files, thus they should be passed in separate lists.     
     def restore(self, encodeparams, decodeparams):
       restorefiles = [None, None]
       with self.g.as_default():
@@ -563,10 +565,10 @@ class AutoEncoder(object):
         newdecodeparameters = [ p for dl in self.decode_layers for p in dl.params() ]
         newparameters = newencodeparameters+newdecodeparameters
         existingparameters=[w for l in self.encode_layers[0:-1] for w in l.params()]
-        if self.freeze:
-          trainableparameters=newparameters
-        else:
-          trainableparameters=newparameters+existingparameters
+        trainableparameters=newparameters
+        for layer in self.encode_layers:
+          if not layer.freeze():
+            trainableparameters+=layer.params()
         implicitparameters=[]
         
         #Restore from checkpoint or Initialize new Variables

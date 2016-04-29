@@ -85,7 +85,7 @@ def tile_imgs(dat, normalize=False):
     horizontal_images_in_display = closeFactor(c, horizontal_images_in_display_ideal)
     vertical_images_in_display = n*c/horizontal_images_in_display 
   if n == 1 and c == 3:
-    return Image.fromarray(dat)
+    return Image.fromarray(dat[0,:],mode='RGB')
   if n > 1 and c != 3:
     horizontal_images_in_display_ideal = math.sqrt(n*c)
     horizontal_images_in_display = closeCommonFactor(n*c, c, horizontal_images_in_display_ideal)

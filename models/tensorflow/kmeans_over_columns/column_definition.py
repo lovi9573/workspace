@@ -23,8 +23,8 @@ TRANSFORM_PARAM = Object()
 =========================== Global Settings ==============================================
 """
 #Data provider to use for training
-# DATA_PROVIDER=CifarDataProvider
-DATA_PROVIDER=MnistDataProvider
+DATA_PROVIDER=CifarDataProvider
+# DATA_PROVIDER=MnistDataProvider
 NUM_LABELS = 10
 
 # Number of epochs to wait for improved loss during pretraining
@@ -39,7 +39,7 @@ DATA_PARAM.batch_size = 64
 
 TRANSFORM_PARAM.mean_file = ""
 TRANSFORM_PARAM.mean_value = [127,127,127]
-TRANSFORM_PARAM.crop_size = 27
+TRANSFORM_PARAM.crop_size = 31
 TRANSFORM_PARAM.mirror = False 
 
 
@@ -198,7 +198,7 @@ LAYERS_cifar = [
 
  
 
-LAYERS = LAYERS_mnist
+LAYERS = LAYERS_cifar
 
 """
 All Examples Pretraining -----------------------------------------------------

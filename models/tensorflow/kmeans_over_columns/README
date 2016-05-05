@@ -1,0 +1,47 @@
+***********************
+* Jesse Lovitt
+* Data Science
+* Final Project - Model Bias Based Clustering
+***********************
+
+=== Description ===
+The files in this directory are those used to run model bias based clustering.
+
+
+=== Dependencies ===
+These files require the following software packages be available.
+- python 2.7
+- Tensorflow
+- numpy
+- scipy
+- matplotlib
+
+=== Setup ===
+The definition of the clustering process is contained in column_definition.py.  
+The various hyperparameters and layer composition of the autoencoders is contained in that file.
+
+You will also need an output directory.  This directory should have three directories within it:
+- "img" Used to store images relating to the training process
+- "log" Used to store logs of the autoencoder weights during training
+- "check" Used to checkpoint the autoencoder across the different phases of training
+
+
+=== Running the Algorithm ===
+To pretrain an autoencoder on all data run the following:
+
+	python pretrain_columns.py <path to output root (contains: img, check, log)> <path to data> 
+	ex:  ipython pretrain_columns.py ./output/ ./cifar-10-batches-py/data_batch_1
+	
+To pretrain one autoencoder on a sampling of each class label
+
+	python pretrain_columns_labeled.py <path to output root (contains: img, check, log)> <path to data> 
+	ex:  ipython pretrain_columns_labeled.py ./output/ ./cifar-10-batches-py/data_batch_1
+	
+To run the clustering algorithm
+
+	python dynamic_columns.py <path to output root (contains: img, check, log)> <path to data> 
+	ex:  ipython pretrain_columns.py ./output/ ./cifar-10-batches-py/data_batch_1	
+	
+NOTE: Each of these will load a checkpoint file to initialize the autoencoders if one exists in the output/check directory.
+      If these programs are run in order they will progressively build on each other using the same autoencoder(s).
+      

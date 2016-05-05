@@ -1,5 +1,7 @@
 """
-Running kmeans over columns of 
+This module contains the implementation of an Autoencoder.
+An Autoencoder is defined using LayerDef's 
+These LayerDef's are then used to instantiate layers which are added into an Autoencoder object.
 """
 from __future__ import absolute_import
 from __future__ import division
@@ -18,8 +20,6 @@ import math
 import matplotlib.pyplot as plt
 from operator import mul,add
 from scipy import stats
-
-
 
 EPSILON  = 0.0000001
 
@@ -44,7 +44,16 @@ class FCLayerDef(LayerDef):
       self._tied_weights = params.get('tied_weights', True)
         
     def outdim(self):
+      if type(self._outdim) == int:
+        return [self._outdim]
+      else:
         return self._outdim
+
+    def outdim_flat(self):
+      if type(self._outdim) == int:
+        return self._outdim
+      else:
+        return reduce(mul, self._outdim)
 
     def indim(self):
         return self._indim
@@ -65,7 +74,6 @@ class ConvLayerDef(LayerDef):
       self._padding = params.get('padding','VALID')
       self._tied_weights = params.get('tied_weights', True)
       self._indim = None
-      self._recon_shape = params.get('recon_shape',None)
         
     def outdim(self):
         return self._outdim
@@ -82,9 +90,6 @@ class ConvLayerDef(LayerDef):
     def instance(self, g, uid, freeze):
         return ConvLayer(self,g,uid, freeze)
       
-    def recon_shape(self):
-      return self._recon_shape
-  
     def __str__(self):
       return "Convolutional layer {}x{}x{} stride {}".format(self._filterdim, self._filterdim,self._outdim,self._stride)
   
@@ -252,35 +257,40 @@ class FCLayer(FeedThroughLayer):
       Constructs the computation graph for this layer and all subsequent encode_layers.
       '''
       with self.g.as_default():
-        if self.d: 
-          self._indim = self._bottom.top().get_shape().as_list()
-          inflat = reduce(mul,self._indim[1:])
-          self.W = tf.Variable(
-                               tf.random_uniform([din, dout],
-                                                 minval=-4.0*math.sqrt(6.0/(din+ dout)),
-                                                 maxval=4.0*math.sqrt(6.0/(din+ dout)),
-                                                 dtype=tf.float32
-                                                 ),
-                               name='Weights_'+str(self._uid))
+        self.W = tf.Variable(
+                             tf.random_uniform([din, dout],
+                                               minval=-4.0*math.sqrt(6.0/(din+ dout)),
+                                               maxval=4.0*math.sqrt(6.0/(din+ dout)),
+                                               dtype=tf.float32
+                                               ),
+                             name='Weights_'+str(self._uid))
 
     def build_fwd(self):
       d_in = self._bottom.get_shape().as_list()
-      d_flat = reduce(mul,d_in)
-      self.init(d_flat,self.d.outdim())
+      d_flat = reduce(mul,d_in[1:])
+      self.init(d_flat,self.d.outdim_flat())
       self.bias = tf.Variable(
-                              tf.zeros([self.d.outdim()]),
+                              tf.zeros([self.d.outdim_flat()]),
                               name='bias_'+str(self._uid)
                               )
       flat_in = tf.reshape(self._bottom,[d_in[0],-1])
-      self._top = self.d.activation_function(tf.add(tf.matmul(flat_in,self.W),self.bias))
+      self._top = self.d.activation_function(
+                                             tf.add(
+                                                    tf.matmul(
+                                                              flat_in,
+                                                              self.W
+                                                              ),
+                                                    self.bias
+                                                    )
+                                             )
       self._params = [self.W, self.bias]
        
     def build_back(self):
       d_in = self._embedding.get_shape().as_list()
-      d_flat = reduce(mul,d_in)
-      self.init(self.d.outdim(),d_flat)      
+      d_flat = reduce(mul,d_in[1:])
+      self.init(self.d.outdim_flat(),d_flat)      
       self.rev_bias = tf.Variable(
-                              tf.zeros([self.d.outdim()]),
+                              tf.zeros([self.d.outdim_flat()]),
                               name='rev_bias_'+str(self._uid)
                               )
       self._inject_recon = self._compute_back(self._inject_embedding)
@@ -289,10 +299,12 @@ class FCLayer(FeedThroughLayer):
     
     def _compute_back(self,top):
       with self.g.as_default():
-        return self.d.activation_function(tf.add(tf.reshape(tf.matmul(top,tf.transpose(self.W)),self._indim),self.rev_bias))
-
-    
-    
+        sum_input = tf.matmul(top, tf.transpose(self.W))
+        sum_input_w_bias = tf.add(sum_input,self.rev_bias)
+        activation = self.d.activation_function(sum_input_w_bias)
+        output_shape = [top.get_shape().as_list()[0]]+self.d.outdim()
+        print(output_shape)
+        return tf.reshape( activation, shape=output_shape)
 
 
 class ConvLayer(FeedThroughLayer):
@@ -341,7 +353,12 @@ class ConvLayer(FeedThroughLayer):
         
     def _compute_back(self, top):
       with self.g.as_default():
-        return self.d.activation_function(tf.nn.deconv2d(top, self.W, self.d.recon_shape(), self.d.strides(), padding=self.d._padding)+self.bias)
+        inshape = top.get_shape().as_list()
+        outshape = [inshape[0], 
+                    (inshape[1]-1)*self.d.strides()[1] + self.d.filterdim()[0] , 
+                    (inshape[2]-1)*self.d.strides()[2] + self.d.filterdim()[1] ,
+                    self.d.outdim()]
+        return self.d.activation_function(tf.nn.deconv2d(top, self.W, outshape, self.d.strides(), padding=self.d._padding)+self.bias)
           
 
 
@@ -423,7 +440,7 @@ class AutoEncoder(object):
         self.bottom_feed = self.encode_layers[0].bottom_feed()
         self.LEARNING_RATE=0.9
         self.MOMENTUM = 0.9
-        self.ALPHA = 0.1 # mnist: 0.3
+        self.ALPHA = 0.3 # mnist: 0.3
         self.freeze = False
         self.summaryid = 0
         self.summarize = False
@@ -509,7 +526,7 @@ class AutoEncoder(object):
         l.build_back()
         #attach remaining decode_layers
         for i,ldef in enumerate(decode_layerdefs[1:]):
-          l = ldef.instance(self.g,str(self.layeruid)+"_"+str(1+i))
+          l = ldef.instance(self.g,str(self.layeruid)+"_"+str(1+i),False)
           l.set_embedding(self.decode_layers[-1].get_recon())
           l.set_inject_embedding(self.decode_layers[-1].get_inject_recon())
           self.decode_layers.append(l)
@@ -654,10 +671,12 @@ class AutoEncoder(object):
           else:
             _,dummy, l = self.s.run([self._recon,self.optimizer_objective,self._loss],feed_dict=feed_dict)
           return l
+
+
           
-
-    
-
+"""
+Testing
+"""
 if __name__ == '__main__':
   class Object:
     pass

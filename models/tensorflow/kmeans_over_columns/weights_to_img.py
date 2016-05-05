@@ -1,3 +1,10 @@
+"""
+A utility module for tiling images contained in a 4-d tensor.
+
+"""
+
+
+
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg

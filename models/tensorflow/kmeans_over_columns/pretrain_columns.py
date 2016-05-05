@@ -4,7 +4,7 @@ Created on Jan 13, 2016
 @author: jlovitt
 '''
 import sys
-from dataio import LMDBDataProvider, CifarDataProvider, MnistDataProvider
+
 from matplotlib import pyplot as plt
 from matplotlib import image as mpimg
 from autoencoder import *
@@ -17,7 +17,7 @@ from PIL import Image
 import math
 import weights_to_img as w2i
 from os import path
-from column_definition import LAYERS,DATA_PARAM,TRANSFORM_PARAM,NUM_LABELS
+from column_definition import LAYERS,DATA_PARAM,TRANSFORM_PARAM,NUM_LABELS, get_dp
 from util import save_recon,save_top,save_injection
             
 
@@ -42,7 +42,7 @@ if __name__ == '__main__':
     LOG_DIR = path.join(BASE_PATH,'log/')
     IMG_DIR =  path.join(BASE_PATH,'img/')
     CHECKPOINT_DIR =  path.join(BASE_PATH,'check/')
-    dp = CifarDataProvider(DATA_PARAM,TRANSFORM_PARAM )
+    dp = get_dp(DATA_PARAM,TRANSFORM_PARAM )
     imgkeys = dp.get_keys()
     with tf.Session() as sess:
       g = tf.Graph()

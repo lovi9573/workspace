@@ -17,11 +17,11 @@ from PIL import Image
 import math
 import weights_to_img as w2i
 from os import path
-from column_definition import LAYERS,DATA_PARAM,TRANSFORM_PARAM,NUM_LABELS
+from column_definition import LAYERS,DATA_PARAM,TRANSFORM_PARAM,NUM_LABELS,get_dp,N_LABELED_EXAMPLES
 from util import save_recon,save_top,save_injection,get_label_batch
 
 
-N_LABELED_EXAMPLES = 8
+
             
 
 if __name__ == '__main__':
@@ -33,7 +33,7 @@ if __name__ == '__main__':
     LOG_DIR = path.join(BASE_PATH,'log/')
     IMG_DIR =  path.join(BASE_PATH,'img/')
     CHECKPOINT_DIR =  path.join(BASE_PATH,'check/')
-    dp = CifarDataProvider(DATA_PARAM,TRANSFORM_PARAM )
+    dp = get_dp(DATA_PARAM,TRANSFORM_PARAM )
     imgkeys = dp.get_keys()
     with tf.Session() as sess:
       for label in range(NUM_LABELS):

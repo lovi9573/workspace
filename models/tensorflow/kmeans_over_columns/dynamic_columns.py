@@ -17,18 +17,11 @@ from PIL import Image
 import math
 import weights_to_img as w2i
 from os import path
-from column_definition import LAYERS,DATA_PARAM,TRANSFORM_PARAM,NUM_LABELS
+from column_definition import LAYERS,DATA_PARAM,TRANSFORM_PARAM,NUM_LABELS,get_dp, N_COLUMNS, TRAIN_BATCHES, D_TRAIN_BATCHES
 
 
 
-# number of columns to route data to dynamically
-N_COLUMNS = 10
 
-# Number of batches to train between data reroute's
-TRAIN_BATCHES = 20
-
-# Growth rate for TRAIN_BATCHES every training cycle
-D_TRAIN_BATCHES = 1
 
 
 
@@ -299,7 +292,7 @@ if __name__ == '__main__':
     LOG_DIR = path.join(BASE_PATH,'log/')
     IMG_DIR =  path.join(BASE_PATH,'img/')
     CHECKPOINT_DIR =  path.join(BASE_PATH,'check/')
-    dp = CifarDataProvider(DATA_PARAM,TRANSFORM_PARAM )
+    dp = get_dp(DATA_PARAM,TRANSFORM_PARAM )
     imgkeys = dp.get_keys()
     columns = {}
     with tf.Session() as sess:

@@ -440,7 +440,7 @@ class AutoEncoder(object):
         self.bottom_feed = self.encode_layers[0].bottom_feed()
         self.LEARNING_RATE=0.9
         self.MOMENTUM = 0.9
-        self.ALPHA = 0.2 # mnist: 0.3
+        self.ALPHA = 0.05 # mnist: 0.3
         self.freeze = False
         self.summaryid = 0
         self.summarize = False
@@ -549,10 +549,9 @@ class AutoEncoder(object):
                                                                                       self._recon.get_shape().ndims) 
                                                               )
         self._loss = tf.reduce_mean(
-                                     tf.pow(
+                                     tf.abs(
                                              self.bottom_feed-
                                              self._recon,
-                                             2
                                              )
                                     )
         

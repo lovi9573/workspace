@@ -31,7 +31,7 @@ NUM_LABELS = 10
 DEFAULT_PATIENCE=5
 
 # Improvement threshold to use as "improvement" during pretraining
-DEFAULT_PATIENCE_DELTA=0.00003
+DEFAULT_PATIENCE_DELTA=0.003
 
 
 
@@ -127,7 +127,7 @@ Cifar setup
 """
 LAYERS_cifar = [
 #1
-          {"Layerdef":ConvLayerDef(7,2,32,padding='VALID',sparsity_target=0.01, sparsity_lr=0,tied_weights=False ),  
+          {"Layerdef":ConvLayerDef(7,2,8,padding='VALID',sparsity_target=0.01, sparsity_lr=0,tied_weights=False ),  
            "Decodedef":[ConvLayerDef(7,2,3,padding='VALID', sparsity_target=0.01, sparsity_lr=0,tied_weights=False )],
            "All":{"N_epochs":-1,
                   "Patience":DEFAULT_PATIENCE,
@@ -143,7 +143,7 @@ LAYERS_cifar = [
                   "Freeze":False},
           }, #out: 13
 # 2
-            {"Layerdef":ConvLayerDef(5,2,16,padding='VALID',sparsity_target=0.01, sparsity_lr=0,tied_weights=False),
+            {"Layerdef":ConvLayerDef(5,2,64,padding='VALID',sparsity_target=0.01, sparsity_lr=0,tied_weights=False),
              "Decodedef":[ConvLayerDef(15,4,3,padding='VALID',sparsity_target=0.01, sparsity_lr=0,tied_weights=False )],
              "All":{"N_epochs":-1,
                     "Patience":DEFAULT_PATIENCE,
@@ -161,7 +161,7 @@ LAYERS_cifar = [
              "Convergence_threshold":0.9
             }, #out: 5
 #3
-          {"Layerdef":ConvLayerDef(3,1,384,padding='VALID',sparsity_target=0.01, sparsity_lr=0,tied_weights=False),
+          {"Layerdef":ConvLayerDef(3,1,256,padding='VALID',sparsity_target=0.01, sparsity_lr=0,tied_weights=False),
            "Decodedef":[ConvLayerDef(23,4,3,padding='VALID',sparsity_target=0.01, sparsity_lr=0,tied_weights=False )], 
            "All":{"N_epochs":-1,
                   "Patience":DEFAULT_PATIENCE,
@@ -177,7 +177,7 @@ LAYERS_cifar = [
                   "Freeze":False},
           }, #out:3
 #4 
-          {'Layerdef':FCLayerDef(1024,sparsity_target=0.0, sparsity_lr=0.0 , activation_entropy_lr=0.0, tied_weights=False),
+          {'Layerdef':FCLayerDef(256,sparsity_target=0.0, sparsity_lr=0.0 , activation_entropy_lr=0.0, tied_weights=False),
            "Decodedef":[FCLayerDef([31,31,3],sparsity_target=0.01, sparsity_lr=0,tied_weights=False )],
            "All":{"N_epochs":-1,
                   "Patience":DEFAULT_PATIENCE,

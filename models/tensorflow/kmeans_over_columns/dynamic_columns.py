@@ -266,20 +266,23 @@ def print_class_entropy(dp,columns,immap):
     output += "Entropy: {}\n".format(entropy)
   return output  
 
+#TODO: This is not correct !!!
 def accuracy(dp,columns,immap): 
   #print accuracy
   #Determined by assuming each column represents it's majority class.
   #Each non-majority class assigned to it will be an error.
   #Get class assignment entropy
+  anchor_assignments = {col:[0]*NUM_LABELS for key,col in immap['key2col'].iteritems()}
   class_assignments = {}
   for key,col in immap['key2col'].iteritems():
     _,l,_ = dp.get_mb_by_keys([key])
     if l[0] not in class_assignments:
       class_assignments[l[0]] = [0]*len(columns.keys())
+    anchor_assignments[col][l[0]] += 1
     class_assignments[l[0]][col] += 1 
   errors = 0
-  for true_class in class_assignments:
-    errors += reduce(add,class_assignments[true_class]) - max(class_assignments[true_class])
+  for col in anchor_assignments:
+    errors += reduce(add,anchor_assignments[col]) - max(anchor_assignments[col])
   return 1.0 - float(errors)/dp.get_n_examples()
 
 if __name__ == '__main__':

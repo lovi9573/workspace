@@ -28,10 +28,10 @@ DATA_PROVIDER=CifarDataProvider
 NUM_LABELS = 10
 
 # Number of epochs to wait for improved loss during pretraining
-DEFAULT_PATIENCE=5
+DEFAULT_PATIENCE=15
 
 # Improvement threshold to use as "improvement" during pretraining
-DEFAULT_PATIENCE_DELTA=0.003
+DEFAULT_PATIENCE_DELTA=0.0001
 
 
 
@@ -127,7 +127,10 @@ Cifar setup
 """
 LAYERS_cifar = [
 #1
-          {"Layerdef":ConvLayerDef(7,2,8,padding='VALID',sparsity_target=0.01, sparsity_lr=0,tied_weights=False ),  
+          {"Layerdef":CorruptionLayerDef(0.01),
+           "Train":False},
+#2
+          {"Layerdef":ConvLayerDef(5,2,8,padding='VALID',sparsity_target=0.01, sparsity_lr=0,tied_weights=False ),  
            "Decodedef":[ConvLayerDef(7,2,3,padding='VALID', sparsity_target=0.01, sparsity_lr=0,tied_weights=False )],
            "All":{"N_epochs":-1,
                   "Patience":DEFAULT_PATIENCE,
@@ -142,8 +145,8 @@ LAYERS_cifar = [
                   "Patience_delta":DEFAULT_PATIENCE_DELTA,
                   "Freeze":False},
           }, #out: 13
-# 2
-            {"Layerdef":ConvLayerDef(5,2,64,padding='VALID',sparsity_target=0.01, sparsity_lr=0,tied_weights=False),
+#3
+            {"Layerdef":ConvLayerDef(5,2,32,padding='VALID',sparsity_target=0.01, sparsity_lr=0,tied_weights=False),
              "Decodedef":[ConvLayerDef(15,4,3,padding='VALID',sparsity_target=0.01, sparsity_lr=0,tied_weights=False )],
              "All":{"N_epochs":-1,
                     "Patience":DEFAULT_PATIENCE,
@@ -160,8 +163,8 @@ LAYERS_cifar = [
              'Use_To_Map_Samples':True,
              "Convergence_threshold":0.9
             }, #out: 5
-#3
-          {"Layerdef":ConvLayerDef(3,1,256,padding='VALID',sparsity_target=0.01, sparsity_lr=0,tied_weights=False),
+#4
+          {"Layerdef":ConvLayerDef(3,1,128,padding='VALID',sparsity_target=0.01, sparsity_lr=0,tied_weights=False),
            "Decodedef":[ConvLayerDef(23,4,3,padding='VALID',sparsity_target=0.01, sparsity_lr=0,tied_weights=False )], 
            "All":{"N_epochs":-1,
                   "Patience":DEFAULT_PATIENCE,
@@ -176,8 +179,8 @@ LAYERS_cifar = [
                   "Patience_delta":DEFAULT_PATIENCE_DELTA,
                   "Freeze":False},
           }, #out:3
-#4 
-          {'Layerdef':FCLayerDef(256,sparsity_target=0.0, sparsity_lr=0.0 , activation_entropy_lr=0.0, tied_weights=False),
+#5 
+          {'Layerdef':FCLayerDef(64,sparsity_target=0.0, sparsity_lr=0.0 , activation_entropy_lr=0.0, tied_weights=False),
            "Decodedef":[FCLayerDef([31,31,3],sparsity_target=0.01, sparsity_lr=0,tied_weights=False )],
            "All":{"N_epochs":-1,
                   "Patience":DEFAULT_PATIENCE,

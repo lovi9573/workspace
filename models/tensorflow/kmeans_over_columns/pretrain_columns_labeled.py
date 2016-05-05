@@ -47,8 +47,9 @@ if __name__ == '__main__':
         #Iterate over layer definitions to build a column
         for layer_number,l in enumerate(LAYERS):
           column.add_layer(l['Layerdef'],l.get('Labeled',{}).get('Freeze',True))
-          column.set_decode(l['Decodedef'])
-          column.build()
+          if l.get('Train',True):
+            column.set_decode(l['Decodedef'])
+            column.build()
           print "{} added".format(l['Layerdef'])
           
           l_params = l.get('Labeled',{})

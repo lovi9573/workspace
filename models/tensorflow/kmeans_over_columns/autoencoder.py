@@ -368,38 +368,21 @@ class PoolingLayer(Layer):
       '''
       Constructs the computation graph for this layer and all subsequent encode_layers.
       '''
-      if self._bottom and self._recon and self.d and self._bottom != self: 
+      if  self.d: 
         indim = self._bottom.top().get_shape().as_list()
         inflat = reduce(mul,indim[1:])
                                 
-        self._top = tf.nn.max_pool(self._bottom.top(),
+        self._top = tf.nn.max_pool(self._bottom,
                                    ksize=[1,self.d.size,self.d.size,1],
                                    strides=[1,self.d.stride,self.d.stride,1],
                                    padding=[1,self.d.padding,self.d.padding,1],
                                    name = "Pool {}".format(self._uid))
-        if self._recon != self:
-            self._recon.build_fwd()
-        else:
-            self.build_loop()
+      
+#   def build_back(self):
+#       self._inject_recon = tf.sigmoid(tf.nn.deconv2d(self._recon.get_inject_recon(), tf.transpose(self.W, [1,0,2,3] ), self._bottom.top().get_shape().as_list(), self.d.strides()))
+#       self._bottom.build_back()
+      
 
-  def build_loop(self):
-      self._recon = tf.sigmoid(tf.nn.deconv2d(self.top(), tf.transpose(self.W, [1,0,2,3] ), self._bottom.top().get_shape().as_list(), self.d.strides()))
-      self._bottom.build_rev()
-      
-  def build_rev(self):
-      self._recon = tf.sigmoid(tf.nn.deconv2d(self._recon.get_recon(), tf.transpose(self.W, [1,0,2,3] ), self._bottom.top().get_shape().as_list(), self.d.strides()))
-      self._bottom.build_rev()
-    
-  def set_inject_embedding(self,i):
-      self._inject_recon = tf.sigmoid(tf.nn.deconv2d(i, tf.transpose(self.W, [1,0,2,3] ), self._bottom.top().get_shape().as_list(), self.d.strides()))
-      self._bottom.build_back()
-      
-  def build_back(self):
-      self._inject_recon = tf.sigmoid(tf.nn.deconv2d(self._recon.get_inject_recon(), tf.transpose(self.W, [1,0,2,3] ), self._bottom.top().get_shape().as_list(), self.d.strides()))
-      self._bottom.build_back()
-      
-  def params(self):
-    return []
 
 def entropy(a):
   return -tf.mul(a,tf.log(a+0.000001))
@@ -440,7 +423,7 @@ class AutoEncoder(object):
         self.bottom_feed = self.encode_layers[0].bottom_feed()
         self.LEARNING_RATE=0.9
         self.MOMENTUM = 0.9
-        self.ALPHA = 0.05 # mnist: 0.3
+        self.ALPHA = 0.0 # mnist: 0.3
         self.freeze = False
         self.summaryid = 0
         self.summarize = False
@@ -614,6 +597,7 @@ class AutoEncoder(object):
         # Optimization
         if len(trainableparameters) > 0:
           self.optimizer = tf.train.MomentumOptimizer(self.LEARNING_RATE,self.MOMENTUM,use_locking=True)
+#           self.optimizer = tf.train.AdamOptimizer()
           self.optimizer_objective = self.optimizer.minimize(self._loss, var_list=trainableparameters)
           optimizer_slots = [x  for x in [self.optimizer.get_slot(v,n) for v in trainableparameters for n in self.optimizer.get_slot_names()] if x != None]
           implicitparameters += optimizer_slots

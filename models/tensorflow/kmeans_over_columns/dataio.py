@@ -328,7 +328,7 @@ class MnistDataProvider:
     Values are rescaled from [0, 255] down to [0, 1.0].
     """
     print('Extracting', filename)
-    dim = self.shape()[1]
+    dim = 28
     with gzip.open(filename) as bytestream:
       bytestream.read(16)
       buf = bytestream.read(dim * dim * num_images)
@@ -355,7 +355,7 @@ class MnistDataProvider:
     return range(self.get_n_examples())
 
   def shape(self):
-      return (self.batch_size, 28,28,1)
+      return (self.batch_size,  self.crop_size, self.crop_size,1)
 
   def normalize(self,raw_image):
     return (raw_image.astype(np.float32))/255.0
@@ -364,12 +364,14 @@ class MnistDataProvider:
     return (normal_image*255.0).astype(np.uint8)
 
   def get_mb_by_keys(self,keys):
-    samples = np.zeros([len(keys)] +list(self.shape()[1:]), dtype=np.float32)
+    samples = np.zeros([len(keys)] +[ self.crop_size,self.crop_size,1], dtype=np.float32)
     labels = np.zeros([len(keys)],dtype=np.uint8)
     sorted_keys = sorted(keys)
     for n,key in enumerate(sorted_keys):
       i = int(key)
-      samples[n,:,:,:] = self._data[i,:,:,:]
+      dx,dy = np.random.randint(28 - self.crop_size+1, size=2)
+      samples[n,:,:,:] = self._data[i,dx:dx+self.crop_size,dy:dy+self.crop_size,:]
+#       samples[n,:,:,:] = self._data[i,:,:,:]
       labels[n] = self._labels[i]
     return (samples,labels,keys)
     
@@ -379,7 +381,9 @@ class MnistDataProvider:
     labels = np.zeros([self.batch_size])
     i = 0
     while i < (self.get_n_examples() - self.batch_size):
-      samples[:,:,:,:] = self._data[i:i+self.batch_size,:,:,:]
+      dx,dy = np.random.randint(28 - self.crop_size+1, size=2)
+      samples = self._data[i:i+self.batch_size,dx:dx+self.crop_size,dy:dy+self.crop_size,:]
+#       samples[:,:,:,:] = self._data[i:i+self.batch_size,:,:,:]
       labels = self._labels[i:i+self.batch_size]
       keys = range(i,i+self.batch_size)
       yield (samples,labels,keys)

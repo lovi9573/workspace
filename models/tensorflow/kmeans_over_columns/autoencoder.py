@@ -225,15 +225,14 @@ class FeedThroughLayer(Layer):
       
 
 class CorruptionLayer(FeedThroughLayer):
-  noiselevel = 0.3
   
   def build_fwd(self):
       '''
       Constructs the computation graph for this layer and all subsequent encode_layers.
       '''
       with self.g.as_default():
-        if self._bottom and self._recon and self.d and self._bottom != self: 
-          self._indim = self._bottom.top().get_shape().as_list()
+        if self.d : 
+          self._indim = self._bottom.get_shape().as_list()
           inflat = reduce(mul,self._indim[1:])
           self.noise = tf.random_uniform(self._indim,
                                          minval = -1,
@@ -245,7 +244,7 @@ class CorruptionLayer(FeedThroughLayer):
                                              dtype=tf.float32)
           self.mask = tf.to_float(self.p < self.d.corruptionlevel())
           self.invmask = tf.to_float(self.p >= self.d.corruptionlevel())
-          self._top = tf.mul(self._bottom.top(),self.invmask) + tf.mul(self.noise, self.mask)
+          self._top = tf.mul(self._bottom,self.invmask) + tf.mul(self.noise, self.mask)
 
     
 
@@ -299,7 +298,8 @@ class FCLayer(FeedThroughLayer):
     
     def _compute_back(self,top):
       with self.g.as_default():
-        sum_input = tf.matmul(top, tf.transpose(self.W))
+        flat_top = tf.reshape(top, [top.get_shape().as_list()[0], -1])
+        sum_input = tf.matmul(flat_top, tf.transpose(self.W))
         sum_input_w_bias = tf.add(sum_input,self.rev_bias)
         activation = self.d.activation_function(sum_input_w_bias)
         output_shape = [top.get_shape().as_list()[0]]+self.d.outdim()
@@ -440,7 +440,7 @@ class AutoEncoder(object):
         self.bottom_feed = self.encode_layers[0].bottom_feed()
         self.LEARNING_RATE=0.9
         self.MOMENTUM = 0.9
-        self.ALPHA = 0.3 # mnist: 0.3
+        self.ALPHA = 0.2 # mnist: 0.3
         self.freeze = False
         self.summaryid = 0
         self.summarize = False
@@ -549,9 +549,12 @@ class AutoEncoder(object):
                                                                                       self._recon.get_shape().ndims) 
                                                               )
         self._loss = tf.reduce_mean(
-                                             tf.abs(
-                                                                 self.bottom_feed-
-                                                                 self._recon))
+                                     tf.pow(
+                                             self.bottom_feed-
+                                             self._recon,
+                                             2
+                                             )
+                                    )
         
         #Sparsity
 #         if definition.sparsity_lr > 0.0:

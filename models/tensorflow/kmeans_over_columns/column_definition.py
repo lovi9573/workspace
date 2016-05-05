@@ -4,6 +4,9 @@ Created on Apr 14, 2016
 @author: jlovitt
 '''
 
+"""
+======================== Do not modify ================
+"""
 from autoencoder import *
 from dataio import LMDBDataProvider, CifarDataProvider, MnistDataProvider
 
@@ -12,29 +15,190 @@ class Object:
 
 DATA_PARAM = Object()
 TRANSFORM_PARAM = Object()
+"""
+======================== Do not modify ================
+"""
 
 """
-Global Settings -----------------------------------------------------
+=========================== Global Settings ==============================================
 """
 #Data provider to use for training
-DATA_PROVIDER=CifarDataProvider
-# DATA_PROVIDER=MnistDataProvider
+# DATA_PROVIDER=CifarDataProvider
+DATA_PROVIDER=MnistDataProvider
+NUM_LABELS = 10
 
 # Number of epochs to wait for improved loss during pretraining
 DEFAULT_PATIENCE=5
 
 # Improvement threshold to use as "improvement" during pretraining
-DEFAULT_PATIENCE_DELTA=0.0003
+DEFAULT_PATIENCE_DELTA=0.00003
+
+
 
 DATA_PARAM.batch_size = 64
 
 TRANSFORM_PARAM.mean_file = ""
 TRANSFORM_PARAM.mean_value = [127,127,127]
-TRANSFORM_PARAM.crop_size = 31
-TRANSFORM_PARAM.mirror = False  
+TRANSFORM_PARAM.crop_size = 27
+TRANSFORM_PARAM.mirror = False 
 
-NUM_LABELS = 10
-RECON_SHAPE = [DATA_PARAM.batch_size,TRANSFORM_PARAM.crop_size,TRANSFORM_PARAM.crop_size,3 ]
+
+"""
+=======================  Layer Definitions ===========================
+"""
+  
+
+# """
+# Mnist setup
+# """
+LAYERS_mnist = [
+#1
+          {"Layerdef":CorruptionLayerDef(0.1),
+           "Train":False},
+#2
+          {"Layerdef":ConvLayerDef(5,2,2,padding='VALID' ,sparsity_target=0.01, sparsity_lr=0,tied_weights=False),  
+           "Decodedef":[ConvLayerDef(5,2,1,padding='VALID',sparsity_target=0.01, sparsity_lr=0,tied_weights=False)],
+           "All":{"N_epochs":-1,
+                  "Patience":DEFAULT_PATIENCE,
+                  "Patience_delta":DEFAULT_PATIENCE_DELTA,
+                  "Freeze":False},
+           "Labeled":{"N_epochs":-1,
+                  "Patience":DEFAULT_PATIENCE,
+                  "Patience_delta":DEFAULT_PATIENCE_DELTA/10,
+                  "Freeze":True},
+           "Mapped":{"N_epochs":0,
+                  "Patience":DEFAULT_PATIENCE,
+                  "Patience_delta":DEFAULT_PATIENCE_DELTA,
+                  "Freeze":False},
+          }, #out: 12
+#3
+          {"Layerdef":ConvLayerDef(4,2,8,padding='VALID' ,sparsity_target=0.01, sparsity_lr=0,tied_weights=False),  
+           "Decodedef":[ConvLayerDef(11,4,1,padding='VALID',sparsity_target=0.01, sparsity_lr=0,tied_weights=False)],
+           "All":{"N_epochs":-1,
+                  "Patience":DEFAULT_PATIENCE,
+                  "Patience_delta":DEFAULT_PATIENCE_DELTA,
+                  "Freeze":False},
+           "Labeled":{"N_epochs":-1,
+                  "Patience":DEFAULT_PATIENCE,
+                  "Patience_delta":DEFAULT_PATIENCE_DELTA/10,
+                  "Freeze":True},
+           "Mapped":{"N_epochs":0,
+                  "Patience":DEFAULT_PATIENCE,
+                  "Patience_delta":DEFAULT_PATIENCE_DELTA,
+                  "Freeze":False},
+          }, #out: 5
+#4
+          {"Layerdef":ConvLayerDef(3,1,16,padding='VALID' ,sparsity_target=0.01, sparsity_lr=0,tied_weights=False),  
+           "Decodedef":[ConvLayerDef(13,7,1,padding='VALID',sparsity_target=0.01, sparsity_lr=0,tied_weights=False)],
+           "All":{"N_epochs":-1,
+                  "Patience":DEFAULT_PATIENCE,
+                  "Patience_delta":DEFAULT_PATIENCE_DELTA,
+                  "Freeze":False},
+           "Labeled":{"N_epochs":-1,
+                  "Patience":DEFAULT_PATIENCE,
+                  "Patience_delta":DEFAULT_PATIENCE_DELTA/10,
+                  "Freeze":True},
+           "Mapped":{"N_epochs":0,
+                  "Patience":DEFAULT_PATIENCE,
+                  "Patience_delta":DEFAULT_PATIENCE_DELTA,
+                  "Freeze":False},
+          }, #out: 3
+#5
+          {"Layerdef":ConvLayerDef(3,1,2,padding='VALID' ,sparsity_target=0.01, sparsity_lr=0,tied_weights=False),  
+           "Decodedef":[ConvLayerDef(27,27,1,padding='VALID',sparsity_target=0.01, sparsity_lr=0,tied_weights=False)],
+           "All":{"N_epochs":-1,
+                  "Patience":DEFAULT_PATIENCE,
+                  "Patience_delta":DEFAULT_PATIENCE_DELTA,
+                  "Freeze":False},
+           "Labeled":{"N_epochs":-1,
+                  "Patience":DEFAULT_PATIENCE,
+                  "Patience_delta":DEFAULT_PATIENCE_DELTA/10,
+                  "Freeze":True},
+           "Mapped":{"N_epochs":0,
+                  "Patience":DEFAULT_PATIENCE,
+                  "Patience_delta":DEFAULT_PATIENCE_DELTA,
+                  "Freeze":False},
+          } #out: 1
+          ]
+
+
+"""
+Cifar setup
+"""
+LAYERS_cifar = [
+#1
+          {"Layerdef":ConvLayerDef(7,2,32,padding='VALID',sparsity_target=0.01, sparsity_lr=0,tied_weights=False ),  
+           "Decodedef":[ConvLayerDef(7,2,3,padding='VALID', sparsity_target=0.01, sparsity_lr=0,tied_weights=False )],
+           "All":{"N_epochs":-1,
+                  "Patience":DEFAULT_PATIENCE,
+                  "Patience_delta":DEFAULT_PATIENCE_DELTA,
+                  "Freeze":True},
+           "Labeled":{"N_epochs":-1,
+                  "Patience":DEFAULT_PATIENCE,
+                  "Patience_delta":DEFAULT_PATIENCE_DELTA/10,
+                  "Freeze":True},
+           "Mapped":{"N_epochs":0,
+                  "Patience":DEFAULT_PATIENCE,
+                  "Patience_delta":DEFAULT_PATIENCE_DELTA,
+                  "Freeze":False},
+          }, #out: 13
+# 2
+            {"Layerdef":ConvLayerDef(5,2,16,padding='VALID',sparsity_target=0.01, sparsity_lr=0,tied_weights=False),
+             "Decodedef":[ConvLayerDef(15,4,3,padding='VALID',sparsity_target=0.01, sparsity_lr=0,tied_weights=False )],
+             "All":{"N_epochs":-1,
+                    "Patience":DEFAULT_PATIENCE,
+                    "Patience_delta":DEFAULT_PATIENCE_DELTA,
+                    "Freeze":True},
+             "Labeled":{"N_epochs":0,
+                    "Patience":DEFAULT_PATIENCE,
+                    "Patience_delta":DEFAULT_PATIENCE_DELTA/10,
+                    "Freeze":True},
+             "Mapped":{"N_epochs":0,
+                    "Patience":DEFAULT_PATIENCE,
+                    "Patience_delta":DEFAULT_PATIENCE_DELTA,
+                    "Freeze":False},
+             'Use_To_Map_Samples':True,
+             "Convergence_threshold":0.9
+            }, #out: 5
+#3
+          {"Layerdef":ConvLayerDef(3,1,384,padding='VALID',sparsity_target=0.01, sparsity_lr=0,tied_weights=False),
+           "Decodedef":[ConvLayerDef(23,4,3,padding='VALID',sparsity_target=0.01, sparsity_lr=0,tied_weights=False )], 
+           "All":{"N_epochs":-1,
+                  "Patience":DEFAULT_PATIENCE,
+                  "Patience_delta":DEFAULT_PATIENCE_DELTA,
+                  "Freeze":False},
+           "Labeled":{"N_epochs":-1,
+                  "Patience":DEFAULT_PATIENCE,
+                  "Patience_delta":DEFAULT_PATIENCE_DELTA/10,
+                  "Freeze":False},
+           "Mapped":{"N_epochs":0,
+                  "Patience":DEFAULT_PATIENCE,
+                  "Patience_delta":DEFAULT_PATIENCE_DELTA,
+                  "Freeze":False},
+          }, #out:3
+#4 
+          {'Layerdef':FCLayerDef(1024,sparsity_target=0.0, sparsity_lr=0.0 , activation_entropy_lr=0.0, tied_weights=False),
+           "Decodedef":[FCLayerDef([31,31,3],sparsity_target=0.01, sparsity_lr=0,tied_weights=False )],
+           "All":{"N_epochs":-1,
+                  "Patience":DEFAULT_PATIENCE,
+                  "Patience_delta":DEFAULT_PATIENCE_DELTA,
+                  "Freeze":False},
+           "Labeled":{"N_epochs":-1,
+                  "Patience":DEFAULT_PATIENCE,
+                  "Patience_delta":DEFAULT_PATIENCE_DELTA,
+                  "Freeze":False},
+           "Mapped":{"N_epochs":0,
+                  "Patience":DEFAULT_PATIENCE,
+                  "Patience_delta":DEFAULT_PATIENCE_DELTA,
+                  "Freeze":False},
+           'Use_To_Map_Samples':True,
+           "Convergence_threshold":0.9
+            }
+          ]
+
+ 
+
+LAYERS = LAYERS_mnist
 
 """
 All Examples Pretraining -----------------------------------------------------
@@ -60,152 +224,9 @@ D_TRAIN_BATCHES = 10
 
 
 
-
-  
-  
-
-
-
-# """
-# Mnist setup
-# """
-# LAYERS = [
-# #           {"Layerdef":CorruptionLayerDef(0.0),
-# #            "Train":False},
-# #           {'Layerdef':FCLayerDef(1024),
-# #            "Pretrain_all":-1,
-# #            "Convergence_threshold":0.0},
-# #1
-#           {"Layerdef":ConvLayerDef(5,2,4,padding='SAME',tied_weights=False ),
-#               "Pretrain_all":-1,
-#                "Patience": DEFAULT_PATIENCE,
-#                "Patience_delta": DEFAULT_PATIENCE_DELTA,
-#           }, #out: 14
-# #2
-#           {"Layerdef":ConvLayerDef(5,2,8,padding='SAME',tied_weights=False),
-#                "Pretrain_all":-1,
-#                "Patience": DEFAULT_PATIENCE,
-#                "Patience_delta": DEFAULT_PATIENCE_DELTA,
-#           }, #out: 7
-# #3
-#           {"Layerdef":ConvLayerDef(3,1,8,tied_weights=False),
-#                "Pretrain_all":-1,
-#                "Patience": DEFAULT_PATIENCE,
-#                "Patience_delta": DEFAULT_PATIENCE_DELTA,
-#           }, #out:5
-#  #4
-#            {"Layerdef":ConvLayerDef(3,1,6,tied_weights=False),
-#                 "Pretrain_all":-1,
-#                 "Patience": DEFAULT_PATIENCE,
-#                 "Patience_delta": DEFAULT_PATIENCE_DELTA,
-#                 'Use_To_Map_Samples':True,
-#                 "Convergence_threshold":0.9  
-#            }, #out: 3
-# #5
-#           {"Layerdef":ConvLayerDef(3,1,4,tied_weights=False),
-#                "Pretrain_all":0,
-#                "Patience": 1,
-#                "Patience_delta": DEFAULT_PATIENCE_DELTA,
-#                'Use_To_Map_Samples':True,
-#                "Convergence_threshold":0.9  
-#           }, #out: 1
-# #6
-#           {'Layerdef':FCLayerDef(2,sparsity_target=0.0, sparsity_lr=0.0 , activation_entropy_lr=0.0, tied_weights=False),
-#            "Pretrain_all":0,
-#            "Patience": 5,
-#            "Patience_delta": DEFAULT_PATIENCE_DELTA,
-#            'Use_To_Map_Samples':True,
-#            "Convergence_threshold":0.97
-#            },
-# #           {"Layerdef":ConvLayerDef(3,1,32,sparsity_target=0.03, sparsity_lr=0.1),
-# #                "Pretrain_all":-1,
-# #                "Patience": 5,
-# #                "Patience_delta": 0.001,
-# #                "Convergence_threshold":0.0},
-# #           {"Layerdef":ConvLayerDef(3,1,32),
-# #             "Pretrain_all":-1,
-# #             "Convergence_threshold":0.0},
-# #           {"Layerdef":ConvLayerDef(3,1,1),
-# #            "Pretrain_all":10,
-# #            "Convergence_threshold":0.99}
-#           ]
-
-
 """
-Cifar setup
+======================== Do not modify ================
 """
-LAYERS = [
-#1
-          {"Layerdef":ConvLayerDef(7,2,32,padding='VALID',sparsity_target=0.01, sparsity_lr=0,tied_weights=False ),  #Could go with 4
-           "Decodedef":[ConvLayerDef(7,2,3,padding='VALID', recon_shape=RECON_SHAPE,sparsity_target=0.01, sparsity_lr=0,tied_weights=False )],
-           "All":{"N_epochs":-1,
-                  "Patience":DEFAULT_PATIENCE,
-                  "Patience_delta":DEFAULT_PATIENCE_DELTA,
-                  "Freeze":True},
-           "Labeled":{"N_epochs":-1,
-                  "Patience":DEFAULT_PATIENCE,
-                  "Patience_delta":DEFAULT_PATIENCE_DELTA/10,
-                  "Freeze":True},
-           "Mapped":{"N_epochs":0,
-                  "Patience":DEFAULT_PATIENCE,
-                  "Patience_delta":DEFAULT_PATIENCE_DELTA,
-                  "Freeze":False},
-          }, #out: 13
-# 2
-#            {"Layerdef":ConvLayerDef(5,2,16,padding='VALID',sparsity_target=0.01, sparsity_lr=0,tied_weights=False),
-#             "Decodedef":[ConvLayerDef(15,4,3,padding='VALID', recon_shape=RECON_SHAPE,sparsity_target=0.01, sparsity_lr=0,tied_weights=False )],
-#             "All":{"N_epochs":-1,
-#                    "Patience":DEFAULT_PATIENCE,
-#                    "Patience_delta":DEFAULT_PATIENCE_DELTA,
-#                    "Freeze":True},
-#             "Labeled":{"N_epochs":0,
-#                    "Patience":DEFAULT_PATIENCE,
-#                    "Patience_delta":DEFAULT_PATIENCE_DELTA/10,
-#                    "Freeze":True},
-#             "Mapped":{"N_epochs":0,
-#                    "Patience":DEFAULT_PATIENCE,
-#                    "Patience_delta":DEFAULT_PATIENCE_DELTA,
-#                    "Freeze":False},
-#             'Use_To_Map_Samples':True,
-#             "Convergence_threshold":0.9
-#            }, #out: 5
-#3
-#           {"Layerdef":ConvLayerDef(3,1,384,padding='VALID',sparsity_target=0.01, sparsity_lr=0,tied_weights=False),
-#            "Decodedef":[ConvLayerDef(23,4,3,padding='VALID', recon_shape=RECON_SHAPE,sparsity_target=0.01, sparsity_lr=0,tied_weights=False )], 
-#            "All":{"N_epochs":-1,
-#                   "Patience":DEFAULT_PATIENCE,
-#                   "Patience_delta":DEFAULT_PATIENCE_DELTA,
-#                   "Freeze":False},
-#            "Labeled":{"N_epochs":-1,
-#                   "Patience":DEFAULT_PATIENCE,
-#                   "Patience_delta":DEFAULT_PATIENCE_DELTA/10,
-#                   "Freeze":False},
-#            "Mapped":{"N_epochs":0,
-#                   "Patience":DEFAULT_PATIENCE,
-#                   "Patience_delta":DEFAULT_PATIENCE_DELTA,
-#                   "Freeze":False},
-#           }, #out:3
-#4 
-          {'Layerdef':FCLayerDef(1024,sparsity_target=0.0, sparsity_lr=0.0 , activation_entropy_lr=0.0, tied_weights=False),
-           "Decodedef":[FCLayerDef([31,31,3],sparsity_target=0.01, sparsity_lr=0,tied_weights=False )],
-           "All":{"N_epochs":-1,
-                  "Patience":DEFAULT_PATIENCE,
-                  "Patience_delta":DEFAULT_PATIENCE_DELTA,
-                  "Freeze":False},
-           "Labeled":{"N_epochs":-1,
-                  "Patience":DEFAULT_PATIENCE,
-                  "Patience_delta":DEFAULT_PATIENCE_DELTA,
-                  "Freeze":False},
-           "Mapped":{"N_epochs":0,
-                  "Patience":DEFAULT_PATIENCE,
-                  "Patience_delta":DEFAULT_PATIENCE_DELTA,
-                  "Freeze":False},
-           'Use_To_Map_Samples':True,
-           "Convergence_threshold":0.9
-            }
-          ]
-
-
 def get_dp(data_param, transform_param):
   return DATA_PROVIDER(data_param, transform_param)
 

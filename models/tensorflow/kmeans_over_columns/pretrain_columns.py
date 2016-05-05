@@ -27,6 +27,13 @@ def pretrain_epoch(column,dp, i):
     n = 0
     for mb in dp.get_mb():
       n += 1
+#       if n < 10:
+#         d,r = column.fwd_back(mb[0])
+#         print("Recon max {}".format(np.max(r)))
+#         plt.imshow(w2i.tile_imgs(r))
+#         plt.set_cmap('gray')
+#         plt.colorbar()
+#         plt.show()
       loss += column.train_mb(mb[0])
     loss /= n
     return loss
@@ -54,8 +61,9 @@ if __name__ == '__main__':
       #Iterate over layer definitions to greedy train a column
       for layer_number,l in enumerate(LAYERS):
         column.add_layer(l['Layerdef'],l.get('All',{}).get('Freeze',True) )
-        column.set_decode(l['Decodedef'])
-        column.build()
+        if l.get('Train',True):
+          column.set_decode(l['Decodedef'])
+          column.build()
         print "{} added".format(l['Layerdef'])
         
         l_params = l.get('All',{})

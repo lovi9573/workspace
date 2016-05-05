@@ -12,6 +12,8 @@ import math
 def save_recon(data, column, columnuid, layeruid, save_path):
     #Reconstruction of a batch
     d,r = column.fwd_back(data)
+    print(np.max(d))
+    print(np.max(r))
     s = list(d.shape)
     s[0] = s[0]*2
     d_r_array = np.empty(s,dtype=d.dtype)
